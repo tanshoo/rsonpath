@@ -153,6 +153,7 @@ pub mod error;
 pub mod input;
 pub mod result;
 pub(crate) mod string_pattern;
+pub mod validator;
 
 pub use string_pattern::StringPattern;
 
