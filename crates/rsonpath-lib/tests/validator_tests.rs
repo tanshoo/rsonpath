@@ -3,15 +3,15 @@ mod validator_tests {
     use rsonpath::{input::BorrowedBytes, validator::ValidatorEngine, StringPattern};
     use rsonpath_syntax::str::JsonString;
 
-    fn build_properties(label_names: &[&str]) -> Vec<StringPattern> {
-        label_names
+    fn build_properties(property_names: &[&str]) -> Vec<StringPattern> {
+        property_names
             .iter()
             .map(|&s| StringPattern::new(&JsonString::new(s)))
             .collect()
     }
 
-    fn build_engine(label_names: &[&str]) -> ValidatorEngine {
-        ValidatorEngine::new(build_properties(label_names))
+    fn build_engine(property_names: &[&str]) -> ValidatorEngine {
+        ValidatorEngine::new(build_properties(property_names))
     }
 
     #[test]
