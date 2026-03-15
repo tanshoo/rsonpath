@@ -23,6 +23,7 @@ nom = "8.0.0"
 serde = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
 unicode-width = "0.2.2"
+serde_json = { workspace = true }
 
 [dev-dependencies]
 ciborium = { workspace = true, default-features = true }
