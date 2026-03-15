@@ -1,17 +1,10 @@
 #[cfg(test)]
 mod validator_tests {
-    use rsonpath::{input::BorrowedBytes, validator::ValidatorEngine, StringPattern};
+    use rsonpath::{input::BorrowedBytes, validator::ValidatorEngine};
     use rsonpath_syntax::str::JsonString;
 
-    fn build_properties(property_names: &[&str]) -> Vec<StringPattern> {
-        property_names
-            .iter()
-            .map(|&s| StringPattern::new(&JsonString::new(s)))
-            .collect()
-    }
-
     fn build_engine(property_names: &[&str]) -> ValidatorEngine {
-        ValidatorEngine::new(build_properties(property_names))
+        ValidatorEngine::new(property_names.iter().copied().map(JsonString::from))
     }
 
     #[test]

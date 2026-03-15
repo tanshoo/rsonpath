@@ -14,6 +14,7 @@ use crate::{
     validator::engine::error::ValidatorEngineError,
     FallibleIterator as _, BLOCK_SIZE,
 };
+use rsonpath_syntax::str::JsonString;
 
 /// Main engine for a fixed JSON Schema schema.
 ///
@@ -21,15 +22,22 @@ use crate::{
 /// on any number of separate inputs, even on separate threads.
 #[derive(Clone, Debug)]
 pub struct ValidatorEngine {
-    property_names: Vec<StringPattern>,
+    property_names: Box<[StringPattern]>,
     simd: SimdConfiguration,
 }
 
 impl ValidatorEngine {
     /// Creates a new engine.
-    pub fn new(property_names: Vec<StringPattern>) -> Self {
+    pub fn new<II>(property_names: II) -> Self
+    where
+        II: IntoIterator<Item = JsonString>,
+    {
         Self {
-            property_names,
+            property_names: property_names
+                .into_iter()
+                .map(StringPattern::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             simd: simd::configure(),
         }
     }
@@ -56,7 +64,7 @@ type Classifier<'i, I, V> =
 /// This is the heart of an Engine run that holds the entire execution state.
 struct Executor<'i, I, V> {
     /// Allowed property names.
-    property_names: &'i Vec<StringPattern>,
+    property_names: &'i Box<[StringPattern]>,
     /// Handle to the input.
     input: &'i I,
     /// Resolved SIMD context.
@@ -68,7 +76,7 @@ where
     I: Input,
     V: Simd,
 {
-    fn new(property_names: &'i Vec<StringPattern>, input: &'i I, simd: V) -> Self {
+    fn new(property_names: &'i Box<[StringPattern]>, input: &'i I, simd: V) -> Self {
         Self {
             property_names,
             input,
