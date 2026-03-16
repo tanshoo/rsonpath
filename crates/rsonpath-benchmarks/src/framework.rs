@@ -5,6 +5,7 @@ use crate::{
     implementations::{
         jsonpath_rust::{JsonpathRust, JsonpathRustError},
         rsonpath::{Rsonpath, RsonpathCount, RsonpathError, RsonpathMmap, RsonpathMmapCount},
+        rsonschema::{Rsonschema, RsonschemaError},
         rust_jsurfer::{JSurfer, JSurferError},
         serde_json_path::{SerdeJsonPath, SerdeJsonPathError},
     },
@@ -24,6 +25,8 @@ pub enum BenchTarget<'q> {
     JSurfer(&'q str),
     JsonpathRust(&'q str),
     SerdeJsonPath(&'q str),
+
+    Rsonschema(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -234,6 +237,12 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(serde_json_path, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+
+            BenchTarget::Rsonschema(q) => {
+                let rsonschema = Rsonschema::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -292,6 +301,13 @@ impl Target for BenchTarget<'_> {
                     load_ahead_of_time,
                     compile_ahead_of_time,
                 )?;
+                Ok(Box::new(prepared))
+            }
+
+            BenchTarget::Rsonschema(q) => {
+                let rsonschema = Rsonschema::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -366,5 +382,12 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         SerdeJsonPathError,
+    ),
+
+    #[error("error preparing Rsonschema bench: {0}")]
+    RsonschemaError(
+        #[source]
+        #[from]
+        RsonschemaError,
     ),
 }
