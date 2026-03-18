@@ -3,6 +3,7 @@ use self::{benchmark_options::BenchmarkOptions, implementation::prepare_with_id}
 use crate::{
     dataset,
     implementations::{
+        boon::{Boon, BoonError},
         jsonpath_rust::{JsonpathRust, JsonpathRustError},
         rsonpath::{Rsonpath, RsonpathCount, RsonpathError, RsonpathMmap, RsonpathMmapCount},
         rsonschema::{Rsonschema, RsonschemaError},
@@ -27,6 +28,7 @@ pub enum BenchTarget<'q> {
     SerdeJsonPath(&'q str),
 
     Rsonschema(&'q str),
+    Boon(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -243,6 +245,11 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+            BenchTarget::Boon(q) => {
+                let boon = Boon::new()?;
+                let prepared = prepare(boon, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -308,6 +315,11 @@ impl Target for BenchTarget<'_> {
                 let rsonschema = Rsonschema::new()?;
                 let prepared =
                     prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::Boon(q) => {
+                let boon = Boon::new()?;
+                let prepared = prepare_with_id(boon, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -389,5 +401,11 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         RsonschemaError,
+    ),
+    #[error("error preparing Boon bench: {0}")]
+    BoonError(
+        #[source]
+        #[from]
+        BoonError,
     ),
 }
