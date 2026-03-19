@@ -5,6 +5,7 @@ use crate::{
     implementations::{
         boon::{Boon, BoonError},
         jsonpath_rust::{JsonpathRust, JsonpathRustError},
+        jsonschema::{JsonSchema, JsonSchemaError},
         rsonpath::{Rsonpath, RsonpathCount, RsonpathError, RsonpathMmap, RsonpathMmapCount},
         rsonschema::{Rsonschema, RsonschemaError},
         rust_jsurfer::{JSurfer, JSurferError},
@@ -29,6 +30,7 @@ pub enum BenchTarget<'q> {
 
     Rsonschema(&'q str),
     Boon(&'q str),
+    JsonSchema(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -250,6 +252,11 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(boon, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+            BenchTarget::JsonSchema(q) => {
+                let jsonschema = JsonSchema::new()?;
+                let prepared = prepare(jsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -320,6 +327,12 @@ impl Target for BenchTarget<'_> {
             BenchTarget::Boon(q) => {
                 let boon = Boon::new()?;
                 let prepared = prepare_with_id(boon, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::JsonSchema(q) => {
+                let jsonschema = JsonSchema::new()?;
+                let prepared =
+                    prepare_with_id(jsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -407,5 +420,11 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         BoonError,
+    ),
+    #[error("error preparing JsonSchema bench: {0}")]
+    JsonSchemaError(
+        #[source]
+        #[from]
+        JsonSchemaError,
     ),
 }

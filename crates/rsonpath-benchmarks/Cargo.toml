@@ -38,6 +38,7 @@ serde_json_path = "0.7.2"
 tar = "0.4.44"
 thiserror = "2.0.18"
 boon = "0.6.1"
+jsonschema = "0.45.0"
 
 [patch.crates-io]
 rsonpath-lib = { path = "../rsonpath-lib" }
