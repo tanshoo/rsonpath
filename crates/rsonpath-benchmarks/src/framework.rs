@@ -4,6 +4,7 @@ use crate::{
     dataset,
     implementations::{
         boon::{Boon, BoonError},
+        dja::{Dja, DjaError},
         jsonpath_rust::{JsonpathRust, JsonpathRustError},
         jsonschema::{JsonSchema, JsonSchemaError},
         rsonpath::{Rsonpath, RsonpathCount, RsonpathError, RsonpathMmap, RsonpathMmapCount},
@@ -31,6 +32,7 @@ pub enum BenchTarget<'q> {
     Rsonschema(&'q str),
     Boon(&'q str),
     JsonSchema(&'q str),
+    Dja(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -257,6 +259,11 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(jsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+            BenchTarget::Dja(q) => {
+                let dja = Dja::new()?;
+                let prepared = prepare(dja, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -333,6 +340,11 @@ impl Target for BenchTarget<'_> {
                 let jsonschema = JsonSchema::new()?;
                 let prepared =
                     prepare_with_id(jsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::Dja(q) => {
+                let dja = Dja::new()?;
+                let prepared = prepare_with_id(dja, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -426,5 +438,11 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         JsonSchemaError,
+    ),
+    #[error("error preparing DJA bench: {0}")]
+    DjaError(
+        #[source]
+        #[from]
+        DjaError,
     ),
 }
