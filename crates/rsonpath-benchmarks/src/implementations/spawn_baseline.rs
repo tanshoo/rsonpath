@@ -5,28 +5,26 @@ use std::{
 };
 use thiserror::Error;
 
-pub struct Dja {}
+// Measures process spawn overhead.
+// Used as a baseline to subtract from timings of CLI utilities (like the DJA benchmark),
+// to better estimate the actual process execution time.
+pub struct SpawnBaseline {}
 
-impl Dja {
-    const VALIDATOR_PATH: &'static str = "./src/implementations/dja-bin/bench";
-}
-
-impl Implementation for Dja {
-    // Path to the JSON Schema file
+impl Implementation for SpawnBaseline {
     type Query = String;
-    // Path to the JSON document file
+
     type File = String;
 
-    type Error = DjaError;
+    type Error = SpawnBaselineError;
 
     type Result<'a> = &'static str;
 
     fn id() -> &'static str {
-        "DJA"
+        "spawn-baseline"
     }
 
     fn new() -> Result<Self, Self::Error> {
-        Ok(Dja {})
+        Ok(SpawnBaseline {})
     }
 
     fn load_file(&self, file_path: &str) -> Result<Self::File, Self::Error> {
@@ -37,22 +35,18 @@ impl Implementation for Dja {
         Ok(schema_file_path.to_string())
     }
 
-    fn run(&self, query: &Self::Query, file: &Self::File) -> Result<Self::Result<'_>, Self::Error> {
-        // ./bench <schema> <document> tokenizer
-        let status = Command::new(Self::VALIDATOR_PATH)
-            .arg(query)
-            .arg(file)
-            .arg("tokenizer")
+    fn run(&self, _query: &Self::Query, _file: &Self::File) -> Result<Self::Result<'_>, Self::Error> {
+        let status = Command::new("true")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()?;
 
         if status.success() {
-            Ok("[validated]")
+            Ok("[]")
         } else {
-            Err(DjaError::DjaProcessError(format!(
-                "DJA `bench` binary (validator) failed with status: {}",
+            Err(SpawnBaselineError::ProcessError(format!(
+                "Spawn baseline (`true`) failed with status: {}",
                 status
             )))
         }
@@ -60,9 +54,9 @@ impl Implementation for Dja {
 }
 
 #[derive(Error, Debug)]
-pub enum DjaError {
-    #[error("DJA process error: {0}")]
-    DjaProcessError(String),
+pub enum SpawnBaselineError {
+    #[error("spawn baseline process error: {0}")]
+    ProcessError(String),
     #[error(transparent)]
     IoError(#[from] io::Error),
 }

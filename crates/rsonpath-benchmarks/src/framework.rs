@@ -11,6 +11,7 @@ use crate::{
         rsonschema::{Rsonschema, RsonschemaError},
         rust_jsurfer::{JSurfer, JSurferError},
         serde_json_path::{SerdeJsonPath, SerdeJsonPathError},
+        spawn_baseline::{SpawnBaseline, SpawnBaselineError},
     },
 };
 use criterion::{Criterion, Throughput};
@@ -33,6 +34,7 @@ pub enum BenchTarget<'q> {
     Boon(&'q str),
     JsonSchema(&'q str),
     Dja(&'q str),
+    SpawnBaseline(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -264,6 +266,11 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(dja, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+            BenchTarget::SpawnBaseline(q) => {
+                let baseline = SpawnBaseline::new()?;
+                let prepared = prepare(baseline, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -345,6 +352,11 @@ impl Target for BenchTarget<'_> {
             BenchTarget::Dja(q) => {
                 let dja = Dja::new()?;
                 let prepared = prepare_with_id(dja, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::SpawnBaseline(q) => {
+                let baseline = SpawnBaseline::new()?;
+                let prepared = prepare_with_id(baseline, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -444,5 +456,11 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         DjaError,
+    ),
+    #[error("error preparing spawn baseline bench: {0}")]
+    SpawnBaselineError(
+        #[source]
+        #[from]
+        SpawnBaselineError,
     ),
 }

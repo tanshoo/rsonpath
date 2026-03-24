@@ -7,3 +7,4 @@ pub mod boon;
 pub mod dja;
 pub mod jsonschema;
 pub mod rsonschema;
+pub mod spawn_baseline;
