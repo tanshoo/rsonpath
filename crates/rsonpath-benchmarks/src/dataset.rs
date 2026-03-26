@@ -511,6 +511,60 @@ pub const fn az_tenants() -> Dataset {
     }
 }
 
+pub const fn depth_3_props_4_len_10_10_seed_42() -> Dataset {
+    Dataset {
+        name: "depth_3_props_4_len_10_10_seed_42",
+        path: dataset_path!("depth_3_props_4_len_10_10_seed_42_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("0fdd0fee91dfabee285a4781817673c639b0672ae0a2af89ea58519c62820fea"),
+    }
+}
+
+pub const fn depth_3_props_6_len_8_12_seed_42() -> Dataset {
+    Dataset {
+        name: "depth_3_props_6_len_8_12_seed_42",
+        path: dataset_path!("depth_3_props_6_len_8_12_seed_42_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("d53ff22d8000f43404b9e6cf2e99a5cd98676a8267a70948747fcd68d4d21a82"),
+    }
+}
+
+pub const fn depth_3_props_8_len_8_12_seed_42() -> Dataset {
+    Dataset {
+        name: "depth_3_props_8_len_8_12_seed_42",
+        path: dataset_path!("depth_3_props_8_len_8_12_seed_42_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("d0d56a043da42f70e7407b0f322d6bf800cef5681a268443773d47a487e5648b"),
+    }
+}
+
+pub const fn baseline_depth_3_props_4_len_10() -> Dataset {
+    Dataset {
+        name: "baseline_depth_3_props_4_len_10",
+        path: dataset_path!("baseline_depth_3_props_4_len_10_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("5a0e469643abb446b741d39c946c81beec924a32171c8c8de0274785a09a156c"),
+    }
+}
+
+pub const fn baseline_depth_3_props_6_len_10() -> Dataset {
+    Dataset {
+        name: "baseline_depth_3_props_6_len_10",
+        path: dataset_path!("baseline_depth_3_props_6_len_10_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("572f30466de558fd5aa3822c6baea5d925ce4da9c5736a6581f6a6091d367037"),
+    }
+}
+
+pub const fn baseline_depth_3_props_8_len_10() -> Dataset {
+    Dataset {
+        name: "baseline_depth_3_props_8_len_10",
+        path: dataset_path!("baseline_depth_3_props_8_len_10_instance.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("e3a5ca66bee493f5b43eea7fdec0ded48595c602b60780fc41d30da3c3d64a40"),
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum DatasetError {
     #[error("Filesystem error: {0}")]

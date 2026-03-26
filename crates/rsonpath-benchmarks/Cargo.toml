@@ -79,3 +79,7 @@ harness = false
 [[bench]]
 name = "rust_native"
 harness = false
+
+[[bench]]
+name = "validator"
+harness = false
