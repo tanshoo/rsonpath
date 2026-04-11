@@ -3,10 +3,46 @@ use std::error::Error;
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    if cfg!(feature = "blaze") {
+        setup_blaze()?;
+    }
+
     if cfg!(feature = "jsurfer") {
         setup_jsurfer()?;
     }
 
+    Ok(())
+}
+
+fn setup_blaze() -> Result<()> {
+    // Run cmake to configure the build
+    let cmake_status = Command::new("cmake")
+        .arg("-B")
+        .arg("build")
+        .current_dir("./src/implementations/blazeShim")
+        .status()?;
+    if !cmake_status.success() {
+        return Err(eyre!("cmake configuration failed with status code: {}", cmake_status));
+    }
+
+    let make_status = Command::new("cmake")
+        .arg("--build")
+        .arg("build")
+        .arg("--config")
+        .arg("Release")
+        .current_dir("./src/implementations/blazeShim")
+        .status()?;
+    if !make_status.success() {
+        return Err(eyre!("cmake build failed with status code: {}", make_status));
+    }
+
+    let blaze_shim_build = std::path::Path::new("./src/implementations/blazeShim/build").canonicalize()?;
+
+    println!("cargo:rerun-if-changed=src/implementations/blazeShim");
+    println!("cargo:rustc-link-search=native={}", blaze_shim_build.display());
+    println!("cargo:rustc-link-lib=dylib=blazeShim");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", blaze_shim_build.display());
+    println!("cargo:rustc-link-lib=stdc++");
     Ok(())
 }
 

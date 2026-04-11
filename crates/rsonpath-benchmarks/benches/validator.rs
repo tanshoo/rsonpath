@@ -12,8 +12,10 @@ pub fn depth_3_props_4_len_10_10(c: &mut Criterion) -> Result<(), BenchmarkError
     .add_target(BenchTarget::Boon(schema))?
     .add_target(BenchTarget::JsonSchema(schema))?
     .add_target(BenchTarget::Dja(schema))?
-    .add_target(BenchTarget::SpawnBaseline(schema))?
-    .finish();
+    .add_target(BenchTarget::SpawnBaseline(schema))?;
+    #[cfg(feature = "blaze")]
+    let benchset = benchset.add_target(BenchTarget::Blaze(schema))?;
+    let benchset = benchset.finish();
 
     benchset.run(c);
 
@@ -32,8 +34,10 @@ pub fn depth_3_props_6_len_8_12(c: &mut Criterion) -> Result<(), BenchmarkError>
     .add_target(BenchTarget::Boon(schema))?
     .add_target(BenchTarget::JsonSchema(schema))?
     .add_target(BenchTarget::Dja(schema))?
-    .add_target(BenchTarget::SpawnBaseline(schema))?
-    .finish();
+    .add_target(BenchTarget::SpawnBaseline(schema))?;
+    #[cfg(feature = "blaze")]
+    let benchset = benchset.add_target(BenchTarget::Blaze(schema))?;
+    let benchset = benchset.finish();
 
     benchset.run(c);
 
@@ -52,8 +56,10 @@ pub fn depth_3_props_8_len_8_12(c: &mut Criterion) -> Result<(), BenchmarkError>
     .add_target(BenchTarget::Boon(schema))?
     .add_target(BenchTarget::JsonSchema(schema))?
     .add_target(BenchTarget::Dja(schema))?
-    .add_target(BenchTarget::SpawnBaseline(schema))?
-    .finish();
+    .add_target(BenchTarget::SpawnBaseline(schema))?;
+    #[cfg(feature = "blaze")]
+    let benchset = benchset.add_target(BenchTarget::Blaze(schema))?;
+    let benchset = benchset.finish();
 
     benchset.run(c);
 

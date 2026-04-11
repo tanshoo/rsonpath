@@ -3,3 +3,4 @@
 /data/*
 Cargo.lock
 !/data/small
+/src/implementations/blazeShim/build/*

@@ -1,5 +1,7 @@
 use self::implementation::prepare;
 use self::{benchmark_options::BenchmarkOptions, implementation::prepare_with_id};
+#[cfg(feature = "blaze")]
+use crate::implementations::blaze::{Blaze, BlazeError};
 use crate::{
     dataset,
     implementations::{
@@ -35,6 +37,8 @@ pub enum BenchTarget<'q> {
     JsonSchema(&'q str),
     Dja(&'q str),
     SpawnBaseline(&'q str),
+    #[cfg(feature = "blaze")]
+    Blaze(&'q str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -271,6 +275,12 @@ impl Target for BenchTarget<'_> {
                 let prepared = prepare(baseline, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
+            #[cfg(feature = "blaze")]
+            BenchTarget::Blaze(q) => {
+                let blaze = Blaze::new()?;
+                let prepared = prepare(blaze, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
         }
     }
 
@@ -357,6 +367,12 @@ impl Target for BenchTarget<'_> {
             BenchTarget::SpawnBaseline(q) => {
                 let baseline = SpawnBaseline::new()?;
                 let prepared = prepare_with_id(baseline, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            #[cfg(feature = "blaze")]
+            BenchTarget::Blaze(q) => {
+                let blaze = Blaze::new()?;
+                let prepared = prepare_with_id(blaze, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
         }
@@ -462,5 +478,12 @@ pub enum BenchmarkError {
         #[source]
         #[from]
         SpawnBaselineError,
+    ),
+    #[cfg(feature = "blaze")]
+    #[error("error preparing Blaze (jsonschema CLI) bench: {0}")]
+    BlazeError(
+        #[source]
+        #[from]
+        BlazeError,
     ),
 }

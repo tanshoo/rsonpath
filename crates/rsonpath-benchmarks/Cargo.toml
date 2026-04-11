@@ -53,6 +53,7 @@ memchr = "2.7.6"
 default = ["simd"]
 simd = ["rsonpath-lib/simd"]
 jsurfer = []
+blaze = []
 
 [build-dependencies]
 eyre = "0.6.12"
