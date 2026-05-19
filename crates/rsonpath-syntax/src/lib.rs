@@ -122,7 +122,6 @@ pub mod error;
 pub mod num;
 mod parser;
 pub mod prelude;
-pub mod schema_parser;
 pub mod str;
 
 /// All characters that are valid whitespace within a JSONPath query.

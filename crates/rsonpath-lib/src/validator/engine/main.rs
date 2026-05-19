@@ -1,5 +1,9 @@
 //! Main implementation of a JSON Schema validator engine.
-
+use crate::classification::structural::BracketType;
+use crate::error::DepthError;
+use crate::validator::schema_parser::{
+    parse_schema, AdditionalProperties, JsonSchemaDefinition, SchemaNode, SchemaNodeId, SchemaParseError,
+};
 use crate::{
     classification::{
         simd::{self, config_simd, dispatch_simd, Simd, SimdConfiguration},
@@ -10,11 +14,11 @@ use crate::{
     input::error::InputErrorConvertible as _,
     input::Input,
     result::empty::EmptyRecorder,
-    string_pattern::StringPattern,
     validator::engine::error::ValidatorEngineError,
     FallibleIterator as _, BLOCK_SIZE,
 };
-use rsonpath_syntax::str::JsonString;
+use rsonpath_syntax::num::JsonUInt;
+use smallvec::{smallvec, SmallVec};
 
 /// Main engine for a fixed JSON Schema schema.
 ///
@@ -22,35 +26,39 @@ use rsonpath_syntax::str::JsonString;
 /// on any number of separate inputs, even on separate threads.
 #[derive(Clone, Debug)]
 pub struct ValidatorEngine {
-    property_names: Box<[StringPattern]>,
+    schema: JsonSchemaDefinition,
     simd: SimdConfiguration,
 }
 
 impl ValidatorEngine {
-    /// Creates a new engine.
-    pub fn new<II>(property_names: II) -> Self
-    where
-        II: IntoIterator<Item = JsonString>,
-    {
+    /// Create a new engine.
+    pub fn new(schema: JsonSchemaDefinition) -> Self {
         Self {
-            property_names: property_names
-                .into_iter()
-                .map(StringPattern::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+            schema,
             simd: simd::configure(),
         }
     }
 
+    /// Compile a JSON Schema from a string into an [`ValidatorEngine`].
+    pub fn compile_schema(schema_str: &str) -> Result<Self, SchemaParseError> {
+        let schema = parse_schema(schema_str)?;
+        let simd = simd::configure();
+        Ok(Self { schema, simd })
+    }
+
+    /// Turn a compiled [`JsonSchemaDefinition`] into a [`ValidatorEngine`].
+    pub fn from_compiled_schema(schema: JsonSchemaDefinition) -> Self {
+        let simd = simd::configure();
+        Self { schema, simd }
+    }
+
     /// Validate the input against the schema.
-    /// Currently only validates that all property names in the input
-    /// belong to the allowed property names.
     pub fn validate<I>(&self, input: &I) -> Result<(), ValidatorEngineError>
     where
         I: Input,
     {
         config_simd!(self.simd => |simd| {
-            let executor = Executor::new(&self.property_names, input, simd);
+            let executor = Executor::new(&self.schema, input, simd);
             executor.run_and_exit()
         })?;
 
@@ -58,13 +66,27 @@ impl ValidatorEngine {
     }
 }
 
-type Classifier<'i, I, V> =
-    <V as Simd>::StructuralClassifier<'i, <I as Input>::BlockIterator<'i, 'static, EmptyRecorder, BLOCK_SIZE>>;
+// This is a convenience macro to hide the type of the classifier.
+// It expects generic types `I` (the Input implementation) and `V` (the SIMD context).
+macro_rules! Classifier {
+    () => {
+        <V as Simd>::StructuralClassifier<'i, <I as Input>::BlockIterator<'i, 'static, EmptyRecorder, BLOCK_SIZE>>
+    };
+}
 
 /// This is the heart of an Engine run that holds the entire execution state.
 struct Executor<'i, I, V> {
-    /// Allowed property names.
-    property_names: &'i Box<[StringPattern]>,
+    /// Current schema node.
+    state: SchemaNodeId,
+    /// Next schema node.
+    next_state: SchemaNodeId,
+    /// Count of seen properties/elements in the current subtree
+    count: JsonUInt,
+    /// Execution stack.
+    stack: SmallStack,
+
+    /// Read-only access to the JSON schema definition to validate against.
+    schema: &'i JsonSchemaDefinition,
     /// Handle to the input.
     input: &'i I,
     /// Resolved SIMD context.
@@ -76,9 +98,13 @@ where
     I: Input,
     V: Simd,
 {
-    fn new(property_names: &'i Box<[StringPattern]>, input: &'i I, simd: V) -> Self {
+    fn new(schema: &'i JsonSchemaDefinition, input: &'i I, simd: V) -> Self {
         Self {
-            property_names,
+            state: schema.root(),
+            next_state: schema.root(),
+            count: JsonUInt::ZERO,
+            stack: SmallStack::new(),
+            schema,
             input,
             simd,
         }
@@ -93,18 +119,19 @@ where
         let mut classifier = structural_classifier;
         classifier.turn_colons_on(0);
 
-        self.run(&mut classifier)
+        self.run(&mut classifier)?;
+
+        self.verify_subtree_closed()
     }
 
     /// Main loop of the engine.
     /// We loop through the document based on the `classifier`'s outputs.
-    /// Currently, the only event we handle is the colon (which indicates a property name).
-    /// Once the input ends, the engine exits.
-    fn run(&mut self, classifier: &mut Classifier<'i, I, V>) -> Result<(), ValidatorEngineError> {
+    fn run(&mut self, classifier: &mut Classifier!()) -> Result<(), ValidatorEngineError> {
         dispatch_simd!(self.simd; self, classifier =>
         fn<'i, I, V>(
             eng: &mut Executor<'i, I, V>,
-            classifier: &mut Classifier<'i, I, V>
+            classifier: &mut Classifier!()
+
         ) -> Result<(), ValidatorEngineError>
         where
             I: Input,
@@ -116,11 +143,17 @@ where
                     Err(err) => return Err(ValidatorEngineError::InputError(err)),
                 };
                 if let Some(event) = next_event.take() {
-                    debug!("Event: {:?}", event);
+                    debug!("====================");
+                    debug!("Event = {:?}", event);
+                    debug!("Depth = {:?}", eng.stack.contents.len());
+                    debug!("State = {:?}", eng.state);
+                    debug!("====================");
 
                     match event {
                         Structural::Colon(idx) => eng.handle_colon(idx)?,
-                        _ => {}
+                        Structural::Comma(idx) => eng.handle_comma(idx)?,
+                        Structural::Opening(b, idx) => eng.handle_opening(b, idx)?,
+                        Structural::Closing(_, idx) => eng.handle_closing(idx)?,
                     }
                 } else {
                     break;
@@ -132,23 +165,88 @@ where
     }
 
     /// Handle a colon at index `idx`.
-    /// Validates the property name that precedes the colon.
+    /// This method only validates atomic values after the colon.
+    /// Objects and arrays are processed at their respective opening character.
     #[inline(always)]
     fn handle_colon(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Colon");
 
-        // Check if property name is valid
-        match self.is_property_name_allowed(idx) {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(ValidatorEngineError::DisallowedProperty(idx)),
-            Err(err) => Err(err),
+        // Check object properties to find a matching transition.
+        let property_node = self.find_transition_on_object_property(idx)?;
+
+        if self.count.try_increment().is_err() {
+            return Ok(());
         }
+
+        // Lookahead to see if the next character is an opening.
+        // If yes, remember the state to transition to,
+        // the remaining logic will be handled in handle_opening.
+        if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+            if c == b'{' || c == b'[' {
+                self.next_state = property_node;
+                return Ok(());
+            }
+        }
+
+        // Validate atomic value.
+        if !self.schema.node(property_node).unwrap().is_primitive() {
+            return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+        }
+        Ok(())
     }
 
-    /// Check if the property name that precedes the colon at index `idx`
-    /// belongs to the allowed property names.
+    /// Handle a comma at index `idx`.
+    /// This method only handles atomic values after the comma.
+    /// Objects and arrays are processed at their respective opening character.
     #[inline(always)]
-    fn is_property_name_allowed(&self, idx: usize) -> Result<bool, ValidatorEngineError> {
+    fn handle_comma(&mut self, _idx: usize) -> Result<(), ValidatorEngineError> {
+        debug!("Comma");
+        todo!()
+    }
+
+    /// Handle the opening of a subtree with given `bracket_type` at index `idx`.
+    #[inline(always)]
+    fn handle_opening(&mut self, bracket_type: BracketType, idx: usize) -> Result<(), ValidatorEngineError> {
+        debug!("Opening {bracket_type:?} and pushing stack.",);
+
+        // Check if the type matches the opening bracket.
+        let schema_node = self.schema.node(self.next_state).unwrap();
+        match (bracket_type, schema_node) {
+            (BracketType::Curly, SchemaNode::Object(_)) => (),
+            (BracketType::Square, SchemaNode::Array) => (),
+            (BracketType::Curly, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "object".into())),
+            (BracketType::Square, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "array".into())),
+        }
+        self.transition_to_next();
+        Ok(())
+    }
+
+    /// Handle the closing of a subtree at index `idx`.
+    #[inline(always)]
+    fn handle_closing(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
+        debug!("Closing and popping stack.");
+
+        // Restore the state from the stack.
+        let frame = self.stack.pop().ok_or_else(|| {
+            ValidatorEngineError::RsonpathEngineError(RsonpathEngineError::DepthBelowZero(idx, DepthError::BelowZero))
+        })?;
+        self.state = frame.state;
+        self.count = frame.count;
+
+        Ok(())
+    }
+
+    /// Find the schema transition for the object property whose name
+    /// precedes the colon at index `idx`. Return the target state if found.
+    ///
+    /// Errors:
+    /// - [`ValidatorEngineError::DisallowedProperty`] if the property
+    ///   is not allowed by `properties` and `additionalProperties`.
+    /// - [`ValidatorEngineError::TypeMismatch`] if the current schema node
+    ///   is not an object.
+    fn find_transition_on_object_property(&self, idx: usize) -> Result<SchemaNodeId, ValidatorEngineError> {
+        let obj_state = self.schema.node(self.state).unwrap();
+
         // The colon can be preceded by whitespace before the actual label.
         let closing_quote_idx = match self.input.seek_backward(idx - 1, b'"') {
             Some(x) => x,
@@ -159,24 +257,93 @@ where
             }
         };
 
-        for property_name in self.property_names {
-            let len = property_name.quoted().len();
+        // Iterate over all property names in the current schema node.
+        if let SchemaNode::Object(obj) = obj_state {
+            for (property_name, target_state) in obj.properties().iter() {
+                let len = property_name.quoted().len();
 
-            // First check if the length matches.
-            if closing_quote_idx + 1 < len {
-                continue;
+                // First check if the length matches.
+                if closing_quote_idx + 1 < len {
+                    continue;
+                }
+
+                // Do the expensive memcmp.
+                let start_idx = closing_quote_idx + 1 - len;
+                if self
+                    .input
+                    .is_member_match(start_idx, closing_quote_idx + 1, property_name)
+                    .e()?
+                {
+                    return Ok(*target_state);
+                }
             }
-
-            // Do the expensive memcmp.
-            let start_idx = closing_quote_idx + 1 - len;
-            if self
-                .input
-                .is_member_match(start_idx, closing_quote_idx + 1, property_name)
-                .e()?
-            {
-                return Ok(true);
+            // Property name not found in `properties`, check `additionalProperties` policy.
+            match obj.additional_properties() {
+                AdditionalProperties::False => return Err(ValidatorEngineError::DisallowedProperty(idx)),
+                AdditionalProperties::Schema(target_state) => {
+                    return Ok(*target_state);
+                }
+                AdditionalProperties::True => {
+                    return Err(ValidatorEngineError::UnsupportedFeature(
+                        "additionalProperties: true".into(),
+                    ))
+                }
             }
         }
-        Ok(false)
+
+        Err(ValidatorEngineError::TypeMismatch(idx, "object".into()))
+    }
+
+    /// Trigger the transition to the `next_state` into a new subtree.
+    fn transition_to_next(&mut self) {
+        self.stack.push(StackFrame {
+            state: self.state,
+            count: JsonUInt::ZERO,
+        });
+        self.state = self.next_state;
+    }
+
+    fn verify_subtree_closed(&mut self) -> Result<(), ValidatorEngineError> {
+        if self.stack.peek().is_some() {
+            Err(ValidatorEngineError::RsonpathEngineError(
+                RsonpathEngineError::MissingClosingCharacter(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// A single frame on the [`Executor`]'s stack enabling restoration
+/// of the execution state after a subtree is processed.
+#[derive(Clone, Copy, Debug)]
+struct StackFrame {
+    state: SchemaNodeId,
+    count: JsonUInt,
+}
+
+#[derive(Debug)]
+struct SmallStack {
+    contents: SmallVec<[StackFrame; 128]>,
+}
+
+impl SmallStack {
+    fn new() -> Self {
+        Self { contents: smallvec![] }
+    }
+
+    #[inline]
+    fn peek(&self) -> Option<StackFrame> {
+        self.contents.last().copied()
+    }
+
+    #[inline]
+    fn pop(&mut self) -> Option<StackFrame> {
+        self.contents.pop()
+    }
+
+    #[inline]
+    fn push(&mut self, value: StackFrame) {
+        self.contents.push(value)
     }
 }
