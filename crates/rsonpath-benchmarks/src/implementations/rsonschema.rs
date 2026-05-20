@@ -30,8 +30,8 @@ impl Implementation for Rsonschema {
     }
 
     fn compile_query(&self, schema_file_path: &str) -> Result<Self::Query, Self::Error> {
-        let props = rsonpath_syntax::schema_parser::parse(schema_file_path)?;
-        let engine = ValidatorEngine::new(props);
+        let schema_str = fs::read_to_string(schema_file_path)?;
+        let engine = ValidatorEngine::compile_schema(&schema_str)?;
 
         Ok(engine)
     }
@@ -45,7 +45,7 @@ impl Implementation for Rsonschema {
 #[derive(Error, Debug)]
 pub enum RsonschemaError {
     #[error(transparent)]
-    SchemaParserError(#[from] rsonpath_syntax::schema_parser::SchemaParserError),
+    SchemaParserError(#[from] rsonpath::validator::schema_parser::SchemaParseError),
     #[error(transparent)]
     ValidatorEngineError(#[from] rsonpath::validator::ValidatorEngineError),
     #[error(transparent)]
