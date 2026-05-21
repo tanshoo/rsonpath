@@ -31,7 +31,7 @@ pub enum SchemaNode {
     /// Object type.
     Object(ObjectConstraints),
     /// Array type.
-    Array,
+    Array(ArrayConstraints),
     /// Logical OR on multiple schema nodes.
     Or(Vec<SchemaNodeId>),
 }
@@ -75,6 +75,19 @@ impl ObjectConstraints {
     #[inline]
     pub fn additional_properties(&self) -> &AdditionalProperties {
         &self.additional_properties
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayConstraints {
+    items: SchemaNodeId,
+}
+
+impl ArrayConstraints {
+    /// Get items.
+    #[inline]
+    pub fn items(&self) -> SchemaNodeId {
+        self.items
     }
 }
 
@@ -165,7 +178,7 @@ impl SchemaParser {
         for type_str in types {
             match type_str {
                 "object" => constraints.push(self.parse_object(value)?),
-                "array" => constraints.push(self.parse_array()?),
+                "array" => constraints.push(self.parse_array(value)?),
                 _ => constraints.push(self.parse_primitive()?),
             }
         }
@@ -206,8 +219,14 @@ impl SchemaParser {
         Ok(node_id)
     }
 
-    fn parse_array(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
-        todo!()
+    fn parse_array(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
+        // Parse `items` if present, otherwise anything is accepted.
+        let items = if let Some(items_schema) = value.get("items") {
+            self.parse(items_schema)?
+        } else {
+            self.add_node(SchemaNode::Any)
+        };
+        Ok(self.add_node(SchemaNode::Array(ArrayConstraints { items })))
     }
 
     fn parse_primitive(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
@@ -473,6 +492,33 @@ mod tests {
         assert!(matches!(definition.nodes[0], SchemaNode::Object(_)));
         assert!(matches!(definition.nodes[1], SchemaNode::Primitive));
         assert!(matches!(&definition.nodes[2], SchemaNode::Or(types) if types == &[SchemaNodeId(0), SchemaNodeId(1)]));
+    }
+
+    #[test]
+    fn parse_array_schema() {
+        let definition = parse_schema_ok(r#"{"type":"array"}"#);
+
+        // `items` is absent so any value is accepted for elements.
+        assert_eq!(definition.root, SchemaNodeId(1));
+        assert_eq!(definition.nodes.len(), 2);
+        assert!(matches!(definition.nodes[0], SchemaNode::Any));
+        let SchemaNode::Array(array) = &definition.nodes[1] else {
+            panic!("expected array node");
+        };
+        assert_eq!(array.items(), SchemaNodeId(0));
+    }
+
+    #[test]
+    fn parse_array_items_schema() {
+        let definition = parse_schema_ok(r#"{"type":"array","items":{"type":"string"}}"#);
+
+        assert_eq!(definition.root, SchemaNodeId(1));
+        assert_eq!(definition.nodes.len(), 2);
+        assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
+        let SchemaNode::Array(array) = &definition.nodes[1] else {
+            panic!("expected array node");
+        };
+        assert_eq!(array.items(), SchemaNodeId(0));
     }
 
     #[test]
