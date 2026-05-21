@@ -24,6 +24,8 @@ impl Display for SchemaNodeId {
 /// each representing a constraint on the JSON structure.
 #[derive(Debug, Clone)]
 pub enum SchemaNode {
+    /// Any value is accepted.
+    Any,
     /// Primitive type (null, boolean, number, integer, string).
     Primitive,
     /// Object type.
@@ -135,6 +137,14 @@ impl SchemaParser {
     }
 
     fn parse(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
+        if let Value::Bool(true) = value {
+            return Ok(self.add_node(SchemaNode::Any));
+        }
+
+        if let Value::Bool(false) = value {
+            return Err(SchemaParseError::UnsupportedKeyword("false".into()));
+        }
+
         // Check for $ref.
         if let Some(ref_str) = value.get("$ref").and_then(|v| v.as_str()) {
             return self.resolve_ref(ref_str);
@@ -223,9 +233,12 @@ pub fn parse_schema(schema_str: &str) -> Result<JsonSchemaDefinition, SchemaPars
 
     // Schema can be `true` (accepts everything), `false` (accepts nothing) or an object.
     if let Value::Bool(true) = schema {
-        unimplemented!()
+        return Ok(JsonSchemaDefinition {
+            nodes: vec![SchemaNode::Any],
+            root: SchemaNodeId(0),
+        });
     } else if let Value::Bool(false) = schema {
-        unimplemented!()
+        return Err(SchemaParseError::UnsupportedKeyword("false".into()));
     }
 
     if !matches!(schema, Value::Object(_)) {
@@ -320,6 +333,15 @@ mod tests {
         assert_eq!(definition.root, SchemaNodeId(0));
         assert_eq!(definition.nodes.len(), 1);
         assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
+    }
+
+    #[test]
+    fn parse_true_schema() {
+        let definition = parse_schema_ok("true");
+
+        assert_eq!(definition.root, SchemaNodeId(0));
+        assert_eq!(definition.nodes.len(), 1);
+        assert!(matches!(definition.nodes[0], SchemaNode::Any));
     }
 
     #[test]
