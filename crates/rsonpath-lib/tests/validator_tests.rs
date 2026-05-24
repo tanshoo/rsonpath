@@ -143,4 +143,35 @@ mod validator_tests {
         let input = BorrowedBytes::new(json.as_bytes());
         assert!(engine.validate(&input).is_ok());
     }
+
+    // Array validation tests
+    #[test]
+    fn test_array_items_integer_valid() {
+        let schema = r#"{"type": "array", "items": {"type": "integer"}}"#;
+        let json = r#"[1, 2, 3]"#;
+        let engine = compile_schema_engine(schema);
+        let input = BorrowedBytes::new(json.as_bytes());
+        if let Err(e) = engine.validate(&input) {
+            panic!("validation failed: {:?}", e);
+        }
+        assert!(engine.validate(&input).is_ok());
+    }
+
+    #[test]
+    fn test_array_items_integer_invalid() {
+        let schema = r#"{"type": "array", "items": {"type": "integer"}}"#;
+        let json = r#"[1, {"stuff": 2}, 3]"#;
+        let engine = compile_schema_engine(schema);
+        let input = BorrowedBytes::new(json.as_bytes());
+        assert!(engine.validate(&input).is_err());
+    }
+
+    #[test]
+    fn test_nested_array_of_strings() {
+        let schema = r#"{"type": "array", "items": {"type": "array", "items": {"type": "string"}}}"#;
+        let json = r#"[["a", "b"], ["c"]]"#;
+        let engine = compile_schema_engine(schema);
+        let input = BorrowedBytes::new(json.as_bytes());
+        assert!(engine.validate(&input).is_ok());
+    }
 }

@@ -80,6 +80,8 @@ struct Executor<'i, I, V> {
     state: SchemaNodeId,
     /// Next schema node.
     next_state: SchemaNodeId,
+    /// Is current subtree an array
+    is_array: bool,
     /// Count of seen properties/elements in the current subtree
     count: JsonUInt,
     /// Execution stack.
@@ -102,6 +104,7 @@ where
         Self {
             state: schema.root(),
             next_state: schema.root(),
+            is_array: false,
             count: JsonUInt::ZERO,
             stack: SmallStack::new(),
             schema,
@@ -117,7 +120,7 @@ where
         let quote_classifier = self.simd.classify_quoted_sequences(iter);
         let structural_classifier = self.simd.classify_structural_characters(quote_classifier);
         let mut classifier = structural_classifier;
-        classifier.turn_colons_on(0);
+        classifier.turn_colons_and_commas_on(0);
 
         self.run(&mut classifier)?;
 
@@ -199,9 +202,30 @@ where
     /// This method only handles atomic values after the comma.
     /// Objects and arrays are processed at their respective opening character.
     #[inline(always)]
-    fn handle_comma(&mut self, _idx: usize) -> Result<(), ValidatorEngineError> {
+    fn handle_comma(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Comma");
-        todo!()
+        if self.is_array {
+            if self.count.try_increment().is_err() {
+                return Ok(());
+            }
+            // Transition to state representing the next array element.
+            if let SchemaNode::Array(arr) = self.schema.node(self.state).unwrap() {
+                self.next_state = arr.items();
+                if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+                    if c == b'{' || c == b'[' {
+                        return Ok(());
+                    }
+                }
+                // Validate atomic value.
+                if !self.schema.node(arr.items()).unwrap().is_primitive() {
+                    return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+                }
+            } else {
+                return Err(ValidatorEngineError::TypeMismatch(idx, "array".into()));
+            }
+        }
+        // No need to process commas in objects, as they are used only to find where atomic values end.
+        Ok(())
     }
 
     /// Handle the opening of a subtree with given `bracket_type` at index `idx`.
@@ -212,12 +236,33 @@ where
         // Check if the type matches the opening bracket.
         let schema_node = self.schema.node(self.next_state).unwrap();
         match (bracket_type, schema_node) {
-            (BracketType::Curly, SchemaNode::Object(_)) => (),
-            (BracketType::Square, SchemaNode::Array) => (),
+            (BracketType::Curly, SchemaNode::Object(_)) => {
+                self.transition_to_next(BracketType::Curly);
+            }
+            (BracketType::Square, SchemaNode::Array(_)) => {
+                self.transition_to_next(BracketType::Square);
+                // We need to validate the first element of the array here, as there is no comma before it.
+                if let SchemaNode::Array(arr) = schema_node {
+                    self.next_state = arr.items();
+                    if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+                        if c != b']' {
+                            if self.count.try_increment().is_err() {
+                                return Ok(());
+                            }
+                        }
+                        if c == b'{' || c == b'[' {
+                            return Ok(());
+                        }
+                    }
+                    // Validate atomic value.
+                    if !self.schema.node(arr.items()).unwrap().is_primitive() {
+                        return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+                    }
+                }
+            }
             (BracketType::Curly, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "object".into())),
             (BracketType::Square, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "array".into())),
         }
-        self.transition_to_next();
         Ok(())
     }
 
@@ -231,6 +276,7 @@ where
             ValidatorEngineError::RsonpathEngineError(RsonpathEngineError::DepthBelowZero(idx, DepthError::BelowZero))
         })?;
         self.state = frame.state;
+        self.is_array = frame.is_array;
         self.count = frame.count;
 
         Ok(())
@@ -295,12 +341,15 @@ where
     }
 
     /// Trigger the transition to the `next_state` into a new subtree.
-    fn transition_to_next(&mut self) {
+    fn transition_to_next(&mut self, opening: BracketType) {
         self.stack.push(StackFrame {
             state: self.state,
-            count: JsonUInt::ZERO,
+            is_array: self.schema.node(self.state).unwrap().is_array(),
+            count: self.count,
         });
         self.state = self.next_state;
+        self.is_array = opening == BracketType::Square;
+        self.count = JsonUInt::ZERO;
     }
 
     fn verify_subtree_closed(&mut self) -> Result<(), ValidatorEngineError> {
@@ -319,6 +368,7 @@ where
 #[derive(Clone, Copy, Debug)]
 struct StackFrame {
     state: SchemaNodeId,
+    is_array: bool,
     count: JsonUInt,
 }
 
