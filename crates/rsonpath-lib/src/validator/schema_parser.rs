@@ -1,124 +1,14 @@
 //! JSON Schema parser.
 use crate::string_pattern::StringPattern;
+use crate::validator::schema_automaton::{
+    AdditionalProperties, ArrayConstraints, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
+};
 use rsonpath_syntax::str::JsonString;
 use serde_json::Value;
 use smallvec::SmallVec;
-use std::fmt::Display;
-use std::{collections::HashMap, hash::Hash};
+
+use std::collections::HashMap;
 use thiserror::Error;
-
-/// Identifier of a [`SchemaNode`].
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct SchemaNodeId(pub(crate) u32);
-
-impl Display for SchemaNodeId {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SchemaNodeId({})", self.0)
-    }
-}
-
-/// JSON Schema constraints node.
-///
-/// Every schema is a graph of these nodes,
-/// each representing a constraint on the JSON structure.
-#[derive(Debug, Clone)]
-pub enum SchemaNode {
-    /// Any value is accepted.
-    Any,
-    /// Primitive type (null, boolean, number, integer, string).
-    Primitive,
-    /// Object type.
-    Object(ObjectConstraints),
-    /// Array type.
-    Array(ArrayConstraints),
-    /// Logical OR on multiple schema nodes.
-    Or(Vec<SchemaNodeId>),
-}
-
-impl SchemaNode {
-    /// Check if the node is a primitive type.
-    pub fn is_primitive(&self) -> bool {
-        matches!(self, SchemaNode::Primitive)
-    }
-}
-
-/// JSON Schema object constraints.
-#[derive(Debug, Clone)]
-pub struct ObjectConstraints {
-    /// Maps property names to their corresponding schema nodes.
-    properties: HashMap<StringPattern, SchemaNodeId>,
-    additional_properties: AdditionalProperties,
-}
-
-/// Possible values for "additionalProperties" in JSON Schema.
-#[derive(Debug, Clone, Default)]
-pub enum AdditionalProperties {
-    /// Any additional properties allowed.
-    /// Default value when "additionalProperties" is not specified.
-    #[default]
-    True,
-    /// No additional properties allowed.
-    False,
-    /// Additional properties must validate against the given schema.
-    Schema(SchemaNodeId),
-}
-
-impl ObjectConstraints {
-    /// Get properties.
-    #[inline]
-    pub fn properties(&self) -> &HashMap<StringPattern, SchemaNodeId> {
-        &self.properties
-    }
-
-    /// Get additional properties policy.
-    #[inline]
-    pub fn additional_properties(&self) -> &AdditionalProperties {
-        &self.additional_properties
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ArrayConstraints {
-    items: SchemaNodeId,
-}
-
-impl ArrayConstraints {
-    /// Get items.
-    #[inline]
-    pub fn items(&self) -> SchemaNodeId {
-        self.items
-    }
-}
-
-/// JSON Schema definition representation.
-#[derive(Debug, Clone)]
-pub struct JsonSchemaDefinition {
-    /// All nodes in the schema graph.
-    nodes: Vec<SchemaNode>,
-    /// Root node index.
-    root: SchemaNodeId,
-}
-
-impl JsonSchemaDefinition {
-    /// Get all nodes in the schema graph.
-    #[inline]
-    pub fn nodes(&self) -> &[SchemaNode] {
-        &self.nodes
-    }
-
-    /// Get root node index.
-    #[inline]
-    pub fn root(&self) -> SchemaNodeId {
-        self.root
-    }
-
-    /// Get node by id.
-    #[inline]
-    pub fn node(&self, id: SchemaNodeId) -> Option<&SchemaNode> {
-        self.nodes.get(id.0 as usize)
-    }
-}
 
 /// JSON Schema definition parser.
 #[derive(Debug)]
@@ -212,10 +102,10 @@ impl SchemaParser {
             };
         }
 
-        let node_id = self.add_node(SchemaNode::Object(ObjectConstraints {
+        let node_id = self.add_node(SchemaNode::Object(ObjectConstraints::new(
             properties,
             additional_properties,
-        }));
+        )));
         Ok(node_id)
     }
 
@@ -226,7 +116,7 @@ impl SchemaParser {
         } else {
             self.add_node(SchemaNode::Any)
         };
-        Ok(self.add_node(SchemaNode::Array(ArrayConstraints { items })))
+        Ok(self.add_node(SchemaNode::Array(ArrayConstraints::new(items))))
     }
 
     fn parse_primitive(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
@@ -247,15 +137,12 @@ impl SchemaParser {
 ///
 /// ## Errors
 /// Fails if the string is not a valid JSON, or is not a valid JSON Schema.
-pub fn parse_schema(schema_str: &str) -> Result<JsonSchemaDefinition, SchemaParseError> {
+pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseError> {
     let schema: Value = serde_json::from_str(schema_str).map_err(SchemaParseError::SerdeError)?;
 
     // Schema can be `true` (accepts everything), `false` (accepts nothing) or an object.
     if let Value::Bool(true) = schema {
-        return Ok(JsonSchemaDefinition {
-            nodes: vec![SchemaNode::Any],
-            root: SchemaNodeId(0),
-        });
+        return Ok(SchemaAutomaton::new(vec![SchemaNode::Any], SchemaNodeId(0)));
     } else if let Value::Bool(false) = schema {
         return Err(SchemaParseError::UnsupportedKeyword("false".into()));
     }
@@ -293,10 +180,7 @@ pub fn parse_schema(schema_str: &str) -> Result<JsonSchemaDefinition, SchemaPars
     // Parse the root schema
     let root = parser.parse(&schema)?;
 
-    Ok(JsonSchemaDefinition {
-        nodes: parser.nodes,
-        root,
-    })
+    Ok(SchemaAutomaton::new(parser.nodes, root))
 }
 
 /// Extract schema name from a reference string in $ref.
@@ -341,7 +225,7 @@ pub enum SchemaParseError {
 mod tests {
     use super::*;
 
-    fn parse_schema_ok(schema: &str) -> JsonSchemaDefinition {
+    fn parse_schema_ok(schema: &str) -> SchemaAutomaton {
         parse_schema(schema).expect("expected schema to parse")
     }
 
@@ -349,18 +233,18 @@ mod tests {
     fn parse_string_schema() {
         let definition = parse_schema_ok(r#"{"type":"string"}"#);
 
-        assert_eq!(definition.root, SchemaNodeId(0));
-        assert_eq!(definition.nodes.len(), 1);
-        assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
     }
 
     #[test]
     fn parse_true_schema() {
         let definition = parse_schema_ok("true");
 
-        assert_eq!(definition.root, SchemaNodeId(0));
-        assert_eq!(definition.nodes.len(), 1);
-        assert!(matches!(definition.nodes[0], SchemaNode::Any));
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Any));
     }
 
     #[test]
@@ -376,18 +260,18 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root, SchemaNodeId(2));
-        assert_eq!(definition.nodes.len(), 3);
+        assert_eq!(definition.root(), SchemaNodeId(2));
+        assert_eq!(definition.nodes().len(), 3);
 
-        assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
-        assert!(matches!(definition.nodes[1], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[1], SchemaNode::Primitive));
 
-        let SchemaNode::Object(object) = &definition.nodes[2] else {
+        let SchemaNode::Object(object) = &definition.nodes()[2] else {
             panic!("expected object node");
         };
-        assert_eq!(object.properties.get(&make_key("name")), Some(&SchemaNodeId(1)));
-        assert_eq!(object.properties.get(&make_key("age")), Some(&SchemaNodeId(0)));
-        assert!(matches!(object.additional_properties, AdditionalProperties::False));
+        assert_eq!(object.properties().get(&make_key("name")), Some(&SchemaNodeId(1)));
+        assert_eq!(object.properties().get(&make_key("age")), Some(&SchemaNodeId(0)));
+        assert!(matches!(object.additional_properties(), AdditionalProperties::False));
     }
 
     #[test]
@@ -402,19 +286,19 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root, SchemaNodeId(2));
-        assert_eq!(definition.nodes.len(), 3);
+        assert_eq!(definition.root(), SchemaNodeId(2));
+        assert_eq!(definition.nodes().len(), 3);
 
-        assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
-        assert!(matches!(definition.nodes[1], SchemaNode::Object(_)));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[1], SchemaNode::Object(_)));
 
-        let SchemaNode::Object(object) = &definition.nodes[2] else {
+        let SchemaNode::Object(object) = &definition.nodes()[2] else {
             panic!("expected object node");
         };
 
-        assert_eq!(object.properties.get(&make_key("name")), Some(&SchemaNodeId(0)));
+        assert_eq!(object.properties().get(&make_key("name")), Some(&SchemaNodeId(0)));
         assert!(matches!(
-            object.additional_properties,
+            object.additional_properties(),
             AdditionalProperties::Schema(SchemaNodeId(1))
         ));
     }
@@ -436,14 +320,14 @@ mod tests {
             }"##,
         );
 
-        assert_eq!(definition.root, SchemaNodeId(0));
-        assert_eq!(definition.nodes.len(), 1);
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
 
-        let SchemaNode::Object(object) = &definition.nodes[0] else {
+        let SchemaNode::Object(object) = &definition.nodes()[0] else {
             panic!("expected object node");
         };
-        assert_eq!(object.properties.get(&make_key("next")), Some(&SchemaNodeId(0)));
-        assert!(matches!(object.additional_properties, AdditionalProperties::False));
+        assert_eq!(object.properties().get(&make_key("next")), Some(&SchemaNodeId(0)));
+        assert!(matches!(object.additional_properties(), AdditionalProperties::False));
     }
 
     #[test]
@@ -464,21 +348,24 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root, SchemaNodeId(2));
-        assert_eq!(definition.nodes.len(), 3);
+        assert_eq!(definition.root(), SchemaNodeId(2));
+        assert_eq!(definition.nodes().len(), 3);
 
-        let SchemaNode::Object(root_object) = &definition.nodes[2] else {
+        let SchemaNode::Object(root_object) = &definition.nodes()[2] else {
             panic!("expected root to be an object node");
         };
-        assert_eq!(root_object.properties.get(&make_key("child")), Some(&SchemaNodeId(1)));
-        assert!(matches!(root_object.additional_properties, AdditionalProperties::False));
+        assert_eq!(root_object.properties().get(&make_key("child")), Some(&SchemaNodeId(1)));
+        assert!(matches!(
+            root_object.additional_properties(),
+            AdditionalProperties::False
+        ));
 
-        let SchemaNode::Object(child_object) = &definition.nodes[1] else {
+        let SchemaNode::Object(child_object) = &definition.nodes()[1] else {
             panic!("expected child to be an object node");
         };
-        assert_eq!(child_object.properties.get(&make_key("name")), Some(&SchemaNodeId(0)));
+        assert_eq!(child_object.properties().get(&make_key("name")), Some(&SchemaNodeId(0)));
         assert!(matches!(
-            child_object.additional_properties,
+            child_object.additional_properties(),
             AdditionalProperties::False
         ));
     }
@@ -487,11 +374,13 @@ mod tests {
     fn parse_multiple_types() {
         let definition = parse_schema_ok(r#"{"type": ["object", "string"]}"#);
 
-        assert_eq!(definition.root, SchemaNodeId(2));
-        assert_eq!(definition.nodes.len(), 3);
-        assert!(matches!(definition.nodes[0], SchemaNode::Object(_)));
-        assert!(matches!(definition.nodes[1], SchemaNode::Primitive));
-        assert!(matches!(&definition.nodes[2], SchemaNode::Or(types) if types == &[SchemaNodeId(0), SchemaNodeId(1)]));
+        assert_eq!(definition.root(), SchemaNodeId(2));
+        assert_eq!(definition.nodes().len(), 3);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Object(_)));
+        assert!(matches!(definition.nodes()[1], SchemaNode::Primitive));
+        assert!(
+            matches!(&definition.nodes()[2], SchemaNode::Or(types) if types == &[SchemaNodeId(0), SchemaNodeId(1)])
+        );
     }
 
     #[test]
@@ -499,10 +388,10 @@ mod tests {
         let definition = parse_schema_ok(r#"{"type":"array"}"#);
 
         // `items` is absent so any value is accepted for elements.
-        assert_eq!(definition.root, SchemaNodeId(1));
-        assert_eq!(definition.nodes.len(), 2);
-        assert!(matches!(definition.nodes[0], SchemaNode::Any));
-        let SchemaNode::Array(array) = &definition.nodes[1] else {
+        assert_eq!(definition.root(), SchemaNodeId(1));
+        assert_eq!(definition.nodes().len(), 2);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Any));
+        let SchemaNode::Array(array) = &definition.nodes()[1] else {
             panic!("expected array node");
         };
         assert_eq!(array.items(), SchemaNodeId(0));
@@ -512,10 +401,10 @@ mod tests {
     fn parse_array_items_schema() {
         let definition = parse_schema_ok(r#"{"type":"array","items":{"type":"string"}}"#);
 
-        assert_eq!(definition.root, SchemaNodeId(1));
-        assert_eq!(definition.nodes.len(), 2);
-        assert!(matches!(definition.nodes[0], SchemaNode::Primitive));
-        let SchemaNode::Array(array) = &definition.nodes[1] else {
+        assert_eq!(definition.root(), SchemaNodeId(1));
+        assert_eq!(definition.nodes().len(), 2);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        let SchemaNode::Array(array) = &definition.nodes()[1] else {
             panic!("expected array node");
         };
         assert_eq!(array.items(), SchemaNodeId(0));

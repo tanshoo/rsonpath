@@ -1,9 +1,8 @@
 //! Main implementation of a JSON Schema validator engine.
 use crate::classification::structural::BracketType;
 use crate::error::DepthError;
-use crate::validator::schema_parser::{
-    parse_schema, AdditionalProperties, JsonSchemaDefinition, SchemaNode, SchemaNodeId, SchemaParseError,
-};
+use crate::validator::schema_automaton::{AdditionalProperties, SchemaAutomaton, SchemaNode, SchemaNodeId};
+use crate::validator::schema_parser::{parse_schema, SchemaParseError};
 use crate::{
     classification::{
         simd::{self, config_simd, dispatch_simd, Simd, SimdConfiguration},
@@ -26,19 +25,11 @@ use smallvec::{smallvec, SmallVec};
 /// on any number of separate inputs, even on separate threads.
 #[derive(Clone, Debug)]
 pub struct ValidatorEngine {
-    schema: JsonSchemaDefinition,
+    schema: SchemaAutomaton,
     simd: SimdConfiguration,
 }
 
 impl ValidatorEngine {
-    /// Create a new engine.
-    pub fn new(schema: JsonSchemaDefinition) -> Self {
-        Self {
-            schema,
-            simd: simd::configure(),
-        }
-    }
-
     /// Compile a JSON Schema from a string into an [`ValidatorEngine`].
     pub fn compile_schema(schema_str: &str) -> Result<Self, SchemaParseError> {
         let schema = parse_schema(schema_str)?;
@@ -46,8 +37,8 @@ impl ValidatorEngine {
         Ok(Self { schema, simd })
     }
 
-    /// Turn a compiled [`JsonSchemaDefinition`] into a [`ValidatorEngine`].
-    pub fn from_compiled_schema(schema: JsonSchemaDefinition) -> Self {
+    /// Turn a compiled [`SchemaAutomaton`] into a [`ValidatorEngine`].
+    pub fn from_compiled_schema(schema: SchemaAutomaton) -> Self {
         let simd = simd::configure();
         Self { schema, simd }
     }
@@ -87,8 +78,8 @@ struct Executor<'i, I, V> {
     /// Execution stack.
     stack: SmallStack,
 
-    /// Read-only access to the JSON schema definition to validate against.
-    schema: &'i JsonSchemaDefinition,
+    /// Read-only access to the schema automaton.
+    schema: &'i SchemaAutomaton,
     /// Handle to the input.
     input: &'i I,
     /// Resolved SIMD context.
@@ -100,7 +91,7 @@ where
     I: Input,
     V: Simd,
 {
-    fn new(schema: &'i JsonSchemaDefinition, input: &'i I, simd: V) -> Self {
+    fn new(schema: &'i SchemaAutomaton, input: &'i I, simd: V) -> Self {
         Self {
             state: schema.root(),
             next_state: schema.root(),
