@@ -183,7 +183,7 @@ where
         }
 
         // Validate atomic value.
-        if !self.schema.node(property_node).unwrap().is_primitive() {
+        if !self.schema[property_node].is_primitive() {
             return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
         }
         Ok(())
@@ -200,7 +200,7 @@ where
                 return Ok(());
             }
             // Transition to state representing the next array element.
-            if let SchemaNode::Array(arr) = self.schema.node(self.state).unwrap() {
+            if let SchemaNode::Array(arr) = &self.schema[self.state] {
                 self.next_state = arr.items();
                 if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
                     if c == b'{' || c == b'[' {
@@ -208,7 +208,7 @@ where
                     }
                 }
                 // Validate atomic value.
-                if !self.schema.node(arr.items()).unwrap().is_primitive() {
+                if !self.schema[arr.items()].is_primitive() {
                     return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
                 }
             } else {
@@ -225,7 +225,7 @@ where
         debug!("Opening {bracket_type:?} and pushing stack.",);
 
         // Check if the type matches the opening bracket.
-        let schema_node = self.schema.node(self.next_state).unwrap();
+        let schema_node = &self.schema[self.next_state];
         match (bracket_type, schema_node) {
             (BracketType::Curly, SchemaNode::Object(_)) => {
                 self.transition_to_next(BracketType::Curly);
@@ -246,7 +246,7 @@ where
                         }
                     }
                     // Validate atomic value.
-                    if !self.schema.node(arr.items()).unwrap().is_primitive() {
+                    if !self.schema[arr.items()].is_primitive() {
                         return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
                     }
                 }
@@ -282,7 +282,7 @@ where
     /// - [`ValidatorEngineError::TypeMismatch`] if the current schema node
     ///   is not an object.
     fn find_transition_on_object_property(&self, idx: usize) -> Result<SchemaNodeId, ValidatorEngineError> {
-        let obj_state = self.schema.node(self.state).unwrap();
+        let obj_state = &self.schema[self.state];
 
         // The colon can be preceded by whitespace before the actual label.
         let closing_quote_idx = match self.input.seek_backward(idx - 1, b'"') {
@@ -335,7 +335,7 @@ where
     fn transition_to_next(&mut self, opening: BracketType) {
         self.stack.push(StackFrame {
             state: self.state,
-            is_array: self.schema.node(self.state).unwrap().is_array(),
+            is_array: self.schema[self.state].is_array(),
             count: self.count,
         });
         self.state = self.next_state;

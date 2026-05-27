@@ -1,11 +1,19 @@
-///! Automaton representation of a JSON Schema.
+//! Automaton representation of a JSON Schema.
 use crate::string_pattern::StringPattern;
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::{fmt::Display, ops::Index};
 
 /// Identifier of a [`SchemaNode`].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub(crate) struct SchemaNodeId(pub(crate) u32);
+
+impl Index<SchemaNodeId> for SchemaAutomaton {
+    type Output = SchemaNode;
+
+    fn index(&self, index: SchemaNodeId) -> &Self::Output {
+        &self.nodes[index.0 as usize]
+    }
+}
 
 impl Display for SchemaNodeId {
     #[inline]
@@ -128,11 +136,5 @@ impl SchemaAutomaton {
     #[inline]
     pub(crate) fn root(&self) -> SchemaNodeId {
         self.root
-    }
-
-    /// Get node by id.
-    #[inline]
-    pub(crate) fn node(&self, id: SchemaNodeId) -> Option<&SchemaNode> {
-        self.nodes.get(id.0 as usize)
     }
 }
