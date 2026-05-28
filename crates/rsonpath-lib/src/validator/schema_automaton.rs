@@ -31,20 +31,31 @@ impl Display for SchemaNodeId {
 pub(crate) enum SchemaNode {
     /// Any value is accepted.
     Any,
-    /// Primitive type (null, boolean, number, integer, string).
-    Primitive,
     /// Object type.
     Object(ObjectConstraints),
     /// Array type.
     Array(ArrayConstraints),
-    /// Logical OR on multiple schema nodes.
-    Or(Vec<SchemaNodeId>),
+    /// String type.
+    Str,
+    /// Number type (currently merged with int).
+    Number,
+    /// Boolean type.
+    Boolean,
+    /// Null type.
+    Null,
+    /// Dispatch for `type` keyword with multiple types allowed.
+    /// It can be assumed that every SchemaNodeId in the vector
+    /// represents a different type.
+    Type(TypeConstraints),
 }
 
 impl SchemaNode {
     /// Check if the node is a primitive type.
     pub(crate) fn is_primitive(&self) -> bool {
-        matches!(self, SchemaNode::Primitive)
+        matches!(
+            self,
+            SchemaNode::Str | SchemaNode::Number | SchemaNode::Boolean | SchemaNode::Null
+        )
     }
 
     /// Check if the node is an array type.
@@ -109,6 +120,22 @@ impl ArrayConstraints {
     #[inline]
     pub(crate) fn items(&self) -> SchemaNodeId {
         self.items
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TypeConstraints {
+    types: Vec<SchemaNodeId>,
+}
+
+impl TypeConstraints {
+    pub(crate) fn new(types: Vec<SchemaNodeId>) -> Self {
+        Self { types }
+    }
+
+    #[inline]
+    pub(crate) fn types(&self) -> &[SchemaNodeId] {
+        &self.types
     }
 }
 

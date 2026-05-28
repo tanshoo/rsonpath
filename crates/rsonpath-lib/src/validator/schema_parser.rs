@@ -2,6 +2,7 @@
 use crate::string_pattern::StringPattern;
 use crate::validator::schema_automaton::{
     AdditionalProperties, ArrayConstraints, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
+    TypeConstraints,
 };
 use rsonpath_syntax::str::JsonString;
 use serde_json::Value;
@@ -69,14 +70,18 @@ impl SchemaParser {
             match type_str {
                 "object" => constraints.push(self.parse_object(value)?),
                 "array" => constraints.push(self.parse_array(value)?),
-                _ => constraints.push(self.parse_primitive()?),
+                "string" => constraints.push(self.parse_primitive_string()?),
+                "number" | "integer" => constraints.push(self.parse_primitive_number()?),
+                "boolean" => constraints.push(self.parse_primitive_boolean()?),
+                "null" => constraints.push(self.parse_primitive_null()?),
+                _ => return Err(SchemaParseError::InvalidSchema("Unsupported type.".into())),
             }
         }
 
         if constraints.len() == 1 {
             Ok(constraints[0])
         } else {
-            Ok(self.add_node(SchemaNode::Or(constraints)))
+            Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints))))
         }
     }
 
@@ -119,8 +124,20 @@ impl SchemaParser {
         Ok(self.add_node(SchemaNode::Array(ArrayConstraints::new(items))))
     }
 
-    fn parse_primitive(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
-        Ok(self.add_node(SchemaNode::Primitive))
+    fn parse_primitive_string(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
+        Ok(self.add_node(SchemaNode::Str))
+    }
+
+    fn parse_primitive_number(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
+        Ok(self.add_node(SchemaNode::Number))
+    }
+
+    fn parse_primitive_boolean(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
+        Ok(self.add_node(SchemaNode::Boolean))
+    }
+
+    fn parse_primitive_null(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
+        Ok(self.add_node(SchemaNode::Null))
     }
 
     fn resolve_ref(&mut self, ref_str: &str) -> Result<SchemaNodeId, SchemaParseError> {
@@ -165,7 +182,7 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
                 Err(SchemaParseError::DuplicateTypeDef(type_name.clone()))?
             }
             // Insert a placeholder, will be replaced with actual node after parsing.
-            let def_id = parser.add_node(SchemaNode::Primitive);
+            let def_id = parser.add_node(SchemaNode::Null);
             parser.defs.insert(key, def_id);
         }
 
@@ -235,7 +252,7 @@ mod tests {
 
         assert_eq!(definition.root(), SchemaNodeId(0));
         assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
     }
 
     #[test]
@@ -263,8 +280,8 @@ mod tests {
         assert_eq!(definition.root(), SchemaNodeId(2));
         assert_eq!(definition.nodes().len(), 3);
 
-        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
-        assert!(matches!(definition.nodes()[1], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Number));
+        assert!(matches!(definition.nodes()[1], SchemaNode::Str));
 
         let SchemaNode::Object(object) = &definition.nodes()[2] else {
             panic!("expected object node");
@@ -289,7 +306,7 @@ mod tests {
         assert_eq!(definition.root(), SchemaNodeId(2));
         assert_eq!(definition.nodes().len(), 3);
 
-        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
         assert!(matches!(definition.nodes()[1], SchemaNode::Object(_)));
 
         let SchemaNode::Object(object) = &definition.nodes()[2] else {
@@ -371,19 +388,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_multiple_types() {
-        let definition = parse_schema_ok(r#"{"type": ["object", "string"]}"#);
-
-        assert_eq!(definition.root(), SchemaNodeId(2));
-        assert_eq!(definition.nodes().len(), 3);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Object(_)));
-        assert!(matches!(definition.nodes()[1], SchemaNode::Primitive));
-        assert!(
-            matches!(&definition.nodes()[2], SchemaNode::Or(types) if types == &[SchemaNodeId(0), SchemaNodeId(1)])
-        );
-    }
-
-    #[test]
     fn parse_array_schema() {
         let definition = parse_schema_ok(r#"{"type":"array"}"#);
 
@@ -403,7 +407,7 @@ mod tests {
 
         assert_eq!(definition.root(), SchemaNodeId(1));
         assert_eq!(definition.nodes().len(), 2);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Primitive));
+        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
         let SchemaNode::Array(array) = &definition.nodes()[1] else {
             panic!("expected array node");
         };
@@ -415,5 +419,59 @@ mod tests {
         let error = parse_schema(r##"{"$ref":"#/$defs/Node"}"##).expect_err("expected schema parsing to fail");
 
         assert!(matches!(error, SchemaParseError::UndefinedType(name) if name == "Node"));
+    }
+
+    #[test]
+    fn parse_str_schema() {
+        let definition = parse_schema_ok(r#"{"type":"string"}"#);
+
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
+    }
+
+    #[test]
+    fn parse_number_schema() {
+        let definition = parse_schema_ok(r#"{"type":"number"}"#);
+
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Number));
+    }
+
+    #[test]
+    fn parse_boolean_schema() {
+        let definition = parse_schema_ok(r#"{"type":"boolean"}"#);
+
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Boolean));
+    }
+
+    #[test]
+    fn parse_null_schema() {
+        let definition = parse_schema_ok(r#"{"type":"null"}"#);
+
+        assert_eq!(definition.root(), SchemaNodeId(0));
+        assert_eq!(definition.nodes().len(), 1);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Null));
+    }
+
+    #[test]
+    fn parse_multiple_types() {
+        let definition = parse_schema_ok(r#"{"type": ["string", "number", "object"]}"#);
+
+        assert_eq!(definition.root(), SchemaNodeId(3));
+        assert_eq!(definition.nodes().len(), 4);
+        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
+        assert!(matches!(definition.nodes()[1], SchemaNode::Number));
+        assert!(matches!(definition.nodes()[2], SchemaNode::Object(_)));
+        let SchemaNode::Type(type_constraints) = &definition.nodes()[3] else {
+            panic!("expected type node");
+        };
+        assert_eq!(
+            type_constraints.types(),
+            &[SchemaNodeId(0), SchemaNodeId(1), SchemaNodeId(2)]
+        );
     }
 }
