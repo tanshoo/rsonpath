@@ -5,7 +5,7 @@ use std::{fmt::Display, ops::Index};
 
 /// Identifier of a [`SchemaNode`].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub(crate) struct SchemaNodeId(pub(crate) u32);
+pub struct SchemaNodeId(pub(crate) u32);
 
 impl Index<SchemaNodeId> for SchemaAutomaton {
     type Output = SchemaNode;
@@ -28,7 +28,7 @@ impl Display for SchemaNodeId {
 /// each representing validator/applicator keywords
 /// applicable at a given point.
 #[derive(Debug, Clone)]
-pub(crate) enum SchemaNode {
+pub enum SchemaNode {
     /// Any value is accepted.
     Any,
     /// Object type.
@@ -49,24 +49,9 @@ pub(crate) enum SchemaNode {
     Type(TypeConstraints),
 }
 
-impl SchemaNode {
-    /// Check if the node is a primitive type.
-    pub(crate) fn is_primitive(&self) -> bool {
-        matches!(
-            self,
-            SchemaNode::Str | SchemaNode::Number | SchemaNode::Boolean | SchemaNode::Null
-        )
-    }
-
-    /// Check if the node is an array type.
-    pub(crate) fn is_array(&self) -> bool {
-        matches!(self, SchemaNode::Array(_))
-    }
-}
-
 /// JSON Schema object constraints.
 #[derive(Debug, Clone)]
-pub(crate) struct ObjectConstraints {
+pub struct ObjectConstraints {
     /// Maps property names to their corresponding schema nodes.
     properties: HashMap<StringPattern, SchemaNodeId>,
     additional_properties: AdditionalProperties,
@@ -74,7 +59,7 @@ pub(crate) struct ObjectConstraints {
 
 /// Possible values for "additionalProperties" in JSON Schema.
 #[derive(Debug, Clone, Default)]
-pub(crate) enum AdditionalProperties {
+pub enum AdditionalProperties {
     /// Any additional properties allowed.
     /// Default value when "additionalProperties" is not specified.
     #[default]
@@ -107,8 +92,10 @@ impl ObjectConstraints {
     }
 }
 
+/// JSON Schema array constraints.
 #[derive(Debug, Clone)]
-pub(crate) struct ArrayConstraints {
+pub struct ArrayConstraints {
+    /// Schema node describing the items in the array.
     items: SchemaNodeId,
 }
 
@@ -123,8 +110,10 @@ impl ArrayConstraints {
     }
 }
 
+/// Node representation of a `type` keyword with multiple types allowed.
+/// Transitions to the corresponding schema node based on the value type.
 #[derive(Debug, Clone)]
-pub(crate) struct TypeConstraints {
+pub struct TypeConstraints {
     types: Vec<SchemaNodeId>,
 }
 
@@ -141,7 +130,7 @@ impl TypeConstraints {
 
 /// Automaton representation of a JSON Schema.
 #[derive(Debug, Clone)]
-pub(crate) struct SchemaAutomaton {
+pub struct SchemaAutomaton {
     /// All nodes in the schema graph.
     nodes: Vec<SchemaNode>,
     /// Root node index.
@@ -154,6 +143,7 @@ impl SchemaAutomaton {
     }
 
     /// Get all nodes in the schema graph.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn nodes(&self) -> &[SchemaNode] {
         &self.nodes
