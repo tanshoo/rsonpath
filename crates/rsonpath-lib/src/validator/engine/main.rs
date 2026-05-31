@@ -180,11 +180,8 @@ where
                 self.next_state = property_node;
                 return Ok(());
             }
-        }
-
-        // Validate atomic value.
-        if !self.schema[property_node].is_primitive() {
-            return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+            // Validate atomic value.
+            self.validate_primitive_type(idx, c, &self.schema[property_node])?;
         }
         Ok(())
     }
@@ -206,10 +203,8 @@ where
                     if c == b'{' || c == b'[' {
                         return Ok(());
                     }
-                }
-                // Validate atomic value.
-                if !self.schema[arr.items()].is_primitive() {
-                    return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+                    // Validate atomic value.
+                    self.validate_primitive_type(idx, c, &self.schema[self.next_state])?;
                 }
             } else {
                 return Err(ValidatorEngineError::TypeMismatch(idx, "array".into()));
@@ -236,18 +231,17 @@ where
                 if let SchemaNode::Array(arr) = schema_node {
                     self.next_state = arr.items();
                     if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-                        if c != b']' {
-                            if self.count.try_increment().is_err() {
-                                return Ok(());
-                            }
+                        if c == b']' {
+                            return Ok(());
+                        }
+                        if self.count.try_increment().is_err() {
+                            return Ok(());
                         }
                         if c == b'{' || c == b'[' {
                             return Ok(());
                         }
-                    }
-                    // Validate atomic value.
-                    if !self.schema[arr.items()].is_primitive() {
-                        return Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into()));
+                        // Validate atomic value.
+                        self.validate_primitive_type(idx, c, &self.schema[self.next_state])?;
                     }
                 }
             }
@@ -335,7 +329,7 @@ where
     fn transition_to_next(&mut self, opening: BracketType) {
         self.stack.push(StackFrame {
             state: self.state,
-            is_array: self.schema[self.state].is_array(),
+            is_array: self.is_array,
             count: self.count,
         });
         self.state = self.next_state;
@@ -343,6 +337,19 @@ where
         self.count = JsonUInt::ZERO;
     }
 
+    /// Validate that the primitive value starting at index `idx` with character `c`,
+    /// matches the type expected by `node`.
+    fn validate_primitive_type(&self, idx: usize, c: u8, node: &SchemaNode) -> Result<(), ValidatorEngineError> {
+        match (node, c) {
+            (SchemaNode::Str, b'"') => Ok(()),
+            (SchemaNode::Number, b'-' | b'0'..=b'9') => Ok(()),
+            (SchemaNode::Boolean, b't' | b'f') => Ok(()),
+            (SchemaNode::Null, b'n') => Ok(()),
+            _ => Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into())),
+        }
+    }
+
+    /// Verify that we have reached zero depth, raise an error if not.
     fn verify_subtree_closed(&mut self) -> Result<(), ValidatorEngineError> {
         if self.stack.peek().is_some() {
             Err(ValidatorEngineError::RsonpathEngineError(
