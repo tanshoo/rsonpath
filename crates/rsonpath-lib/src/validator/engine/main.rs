@@ -113,6 +113,10 @@ where
         let mut classifier = structural_classifier;
         classifier.turn_colons_and_commas_on(0);
 
+        if let Some((idx, c)) = self.input.seek_non_whitespace_forward(0).e()? {
+            self.validate_type(idx, c, &self.schema[self.state])?;
+        }
+
         self.run(&mut classifier)?;
 
         self.verify_subtree_closed()
@@ -132,11 +136,7 @@ where
             V: Simd
         {
             loop {
-                let mut next_event = match classifier.next() {
-                    Ok(e) => e,
-                    Err(err) => return Err(ValidatorEngineError::InputError(err)),
-                };
-                if let Some(event) = next_event.take() {
+                if let Some(event) = classifier.next().map_err(ValidatorEngineError::InputError)?.take() {
                     debug!("====================");
                     debug!("Event = {:?}", event);
                     debug!("Depth = {:?}", eng.stack.contents.len());
@@ -159,55 +159,42 @@ where
     }
 
     /// Handle a colon at index `idx`.
-    /// This method only validates atomic values after the colon.
-    /// Objects and arrays are processed at their respective opening character.
+    /// Finds the next state to transition to based on the object's properties.
+    /// Transitions into objects and arrays are processed at their respective opening character.
     #[inline(always)]
     fn handle_colon(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Colon");
 
         // Check object properties to find a matching transition.
-        let property_node = self.find_transition_on_object_property(idx)?;
-
+        self.next_state = self.find_transition_on_object_property(idx)?;
         if self.count.try_increment().is_err() {
             return Ok(());
         }
-
-        // Lookahead to see if the next character is an opening.
-        // If yes, remember the state to transition to,
-        // the remaining logic will be handled in handle_opening.
-        if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-            if c == b'{' || c == b'[' {
-                self.next_state = property_node;
-                return Ok(());
-            }
-            // Validate atomic value.
-            self.validate_primitive_type(idx, c, &self.schema[property_node])?;
+        // Check if the value following the colon matches the expected type.
+        if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+            self.validate_type(new_idx, c, &self.schema[self.next_state])?;
         }
         Ok(())
     }
 
     /// Handle a comma at index `idx`.
-    /// This method only handles atomic values after the comma.
-    /// Objects and arrays are processed at their respective opening character.
+    /// Only used for arrays, where it finds the next state to transition to based on the array's items.
+    /// Transitions into objects and arrays are processed at their respective opening character.
     #[inline(always)]
     fn handle_comma(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Comma");
+
         if self.is_array {
-            if self.count.try_increment().is_err() {
-                return Ok(());
-            }
-            // Transition to state representing the next array element.
             if let SchemaNode::Array(arr) = &self.schema[self.state] {
+                // The only possible transition from an array node is to its items schema node.
                 self.next_state = arr.items();
-                if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-                    if c == b'{' || c == b'[' {
-                        return Ok(());
-                    }
-                    // Validate atomic value.
-                    self.validate_primitive_type(idx, c, &self.schema[self.next_state])?;
+                if self.count.try_increment().is_err() {
+                    return Ok(());
                 }
-            } else {
-                return Err(ValidatorEngineError::TypeMismatch(idx, "array".into()));
+                // Check if the value following the comma matches the expected type.
+                if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+                    self.validate_type(new_idx, c, &self.schema[self.next_state])?;
+                }
             }
         }
         // No need to process commas in objects, as they are used only to find where atomic values end.
@@ -219,34 +206,24 @@ where
     fn handle_opening(&mut self, bracket_type: BracketType, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Opening {bracket_type:?} and pushing stack.",);
 
-        // Check if the type matches the opening bracket.
-        let schema_node = &self.schema[self.next_state];
-        match (bracket_type, schema_node) {
-            (BracketType::Curly, SchemaNode::Object(_)) => {
-                self.transition_to_next(BracketType::Curly);
-            }
-            (BracketType::Square, SchemaNode::Array(_)) => {
-                self.transition_to_next(BracketType::Square);
-                // We need to validate the first element of the array here, as there is no comma before it.
-                if let SchemaNode::Array(arr) = schema_node {
-                    self.next_state = arr.items();
-                    if let Some((_, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-                        if c == b']' {
-                            return Ok(());
-                        }
-                        if self.count.try_increment().is_err() {
-                            return Ok(());
-                        }
-                        if c == b'{' || c == b'[' {
-                            return Ok(());
-                        }
-                        // Validate atomic value.
-                        self.validate_primitive_type(idx, c, &self.schema[self.next_state])?;
+        self.transition_to_next(bracket_type);
+
+        // We need to validate the first element of the array here, as there is no comma before it.
+        if self.is_array {
+            if let SchemaNode::Array(arr) = &self.schema[self.state] {
+                // The only possible transition from an array node is to its items schema node.
+                self.next_state = arr.items();
+                if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
+                    if c == b']' {
+                        return Ok(());
                     }
+                    if self.count.try_increment().is_err() {
+                        return Ok(());
+                    }
+                    // Check if the value following the comma matches the expected type.
+                    self.validate_type(new_idx, c, &self.schema[self.next_state])?;
                 }
             }
-            (BracketType::Curly, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "object".into())),
-            (BracketType::Square, _) => return Err(ValidatorEngineError::TypeMismatch(idx, "array".into())),
         }
         Ok(())
     }
@@ -337,15 +314,18 @@ where
         self.count = JsonUInt::ZERO;
     }
 
-    /// Validate that the primitive value starting at index `idx` with character `c`,
+    /// Validate that the value starting at index `idx` with character `c`,
     /// matches the type expected by `node`.
-    fn validate_primitive_type(&self, idx: usize, c: u8, node: &SchemaNode) -> Result<(), ValidatorEngineError> {
+    #[inline(always)]
+    fn validate_type(&self, idx: usize, c: u8, node: &SchemaNode) -> Result<(), ValidatorEngineError> {
         match (node, c) {
+            (SchemaNode::Object(_), b'{') => Ok(()),
+            (SchemaNode::Array(_), b'[') => Ok(()),
             (SchemaNode::Str, b'"') => Ok(()),
             (SchemaNode::Number, b'-' | b'0'..=b'9') => Ok(()),
             (SchemaNode::Boolean, b't' | b'f') => Ok(()),
             (SchemaNode::Null, b'n') => Ok(()),
-            _ => Err(ValidatorEngineError::TypeMismatch(idx, "primitive type".into())),
+            _ => Err(ValidatorEngineError::TypeMismatch(idx, "type".into())),
         }
     }
 
