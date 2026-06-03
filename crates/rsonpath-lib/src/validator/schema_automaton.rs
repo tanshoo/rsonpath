@@ -1,6 +1,5 @@
 //! Automaton representation of a JSON Schema.
 use crate::string_pattern::StringPattern;
-use std::collections::HashMap;
 use std::{fmt::Display, ops::Index};
 
 /// Identifier of a [`SchemaNode`].
@@ -53,7 +52,7 @@ pub enum SchemaNode {
 #[derive(Debug, Clone)]
 pub struct ObjectConstraints {
     /// Maps property names to their corresponding schema nodes.
-    properties: HashMap<StringPattern, SchemaNodeId>,
+    properties: Box<[(StringPattern, SchemaNodeId)]>,
     additional_properties: AdditionalProperties,
 }
 
@@ -72,7 +71,7 @@ pub enum AdditionalProperties {
 
 impl ObjectConstraints {
     pub(crate) fn new(
-        properties: HashMap<StringPattern, SchemaNodeId>,
+        properties: Box<[(StringPattern, SchemaNodeId)]>,
         additional_properties: AdditionalProperties,
     ) -> Self {
         Self {
@@ -82,7 +81,7 @@ impl ObjectConstraints {
     }
 
     #[inline]
-    pub(crate) fn properties(&self) -> &HashMap<StringPattern, SchemaNodeId> {
+    pub(crate) fn properties(&self) -> &[(StringPattern, SchemaNodeId)] {
         &self.properties
     }
 

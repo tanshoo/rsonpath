@@ -86,7 +86,7 @@ impl SchemaParser {
     }
 
     fn parse_object(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
-        let mut properties = HashMap::new();
+        let mut properties = Vec::new();
         let mut additional_properties = AdditionalProperties::default();
 
         // properties
@@ -94,7 +94,7 @@ impl SchemaParser {
             properties.reserve(props_map.len());
             for (key, val) in props_map {
                 let node_id = self.parse(val)?;
-                properties.insert(make_key(key), node_id);
+                properties.push((make_key(key), node_id));
             }
         }
 
@@ -108,7 +108,7 @@ impl SchemaParser {
         }
 
         let node_id = self.add_node(SchemaNode::Object(ObjectConstraints::new(
-            properties,
+            properties.into_boxed_slice(),
             additional_properties,
         )));
         Ok(node_id)

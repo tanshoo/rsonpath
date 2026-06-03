@@ -267,7 +267,7 @@ where
 
         // Iterate over all property names in the current schema node.
         if let SchemaNode::Object(obj) = obj_state {
-            for (property_name, target_state) in obj.properties().iter() {
+            for (property_name, target_state) in obj.properties() {
                 let len = property_name.quoted().len();
 
                 // First check if the length matches.
