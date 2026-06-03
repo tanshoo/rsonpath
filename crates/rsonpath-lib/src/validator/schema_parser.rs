@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 /// JSON Schema definition parser.
+/// The parser assumes that the input schema is a well-formed JSON.
 #[derive(Debug)]
 pub struct SchemaParser {
     /// All nodes in the schema graph.
@@ -35,18 +36,15 @@ impl SchemaParser {
     /// Add a new schema node and return its id.
     #[inline]
     fn add_node(&mut self, node: SchemaNode) -> SchemaNodeId {
-        let id = SchemaNodeId(self.nodes.len() as u32);
         self.nodes.push(node);
-        id
+        SchemaNodeId(self.nodes.len() as u32 - 1)
     }
 
     fn parse(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
         if let Value::Bool(true) = value {
             return Ok(self.add_node(SchemaNode::Any));
-        }
-
-        if let Value::Bool(false) = value {
-            return Err(SchemaParseError::UnsupportedKeyword("false".into()));
+        } else if let Value::Bool(false) = value {
+            return Err(SchemaParseError::UnsupportedKeyword("false"));
         }
 
         // Check for $ref.
@@ -55,14 +53,9 @@ impl SchemaParser {
         }
 
         let types: SmallVec<[&str; 7]> = match value.get("type") {
-            None => SmallVec::from_slice(&Self::DEFAULT_TYPES),
             Some(Value::String(s)) => SmallVec::from_slice(&[s.as_str()]),
             Some(Value::Array(arr)) => arr.iter().filter_map(|v| v.as_str()).collect(),
-            Some(_) => {
-                return Err(SchemaParseError::InvalidSchema(
-                    "The 'type' keyword must be a string or an array of strings.".into(),
-                ))
-            }
+            _ => SmallVec::from_slice(&Self::DEFAULT_TYPES),
         };
 
         let mut constraints = Vec::new();
@@ -73,8 +66,7 @@ impl SchemaParser {
                 "string" => constraints.push(self.parse_primitive_string()?),
                 "number" | "integer" => constraints.push(self.parse_primitive_number()?),
                 "boolean" => constraints.push(self.parse_primitive_boolean()?),
-                "null" => constraints.push(self.parse_primitive_null()?),
-                _ => return Err(SchemaParseError::InvalidSchema("Unsupported type.".into())),
+                _ => constraints.push(self.parse_primitive_null()?),
             }
         }
 
@@ -161,13 +153,7 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
     if let Value::Bool(true) = schema {
         return Ok(SchemaAutomaton::new(vec![SchemaNode::Any], SchemaNodeId(0)));
     } else if let Value::Bool(false) = schema {
-        return Err(SchemaParseError::UnsupportedKeyword("false".into()));
-    }
-
-    if !matches!(schema, Value::Object(_)) {
-        return Err(SchemaParseError::InvalidSchema(
-            "Schema must be an object or a boolean".into(),
-        ));
+        return Err(SchemaParseError::UnsupportedKeyword("false"));
     }
 
     let mut parser = SchemaParser::new();
@@ -206,10 +192,9 @@ fn get_schema_name_from_ref(ref_str: &str) -> Result<&str, SchemaParseError> {
     if ref_str.starts_with("#/$defs/") {
         Ok(&ref_str["#/$defs/".len()..])
     } else {
-        Err(SchemaParseError::UnsupportedKeyword(format!(
-            "Only local references in format '#/$defs/TypeName' are supported, got '{}'",
-            ref_str
-        )))
+        Err(SchemaParseError::UnsupportedKeyword(
+            "Only local references in format '#/$defs/TypeName' are supported",
+        ))
     }
 }
 
@@ -226,16 +211,13 @@ pub enum SchemaParseError {
     SerdeError(#[from] serde_json::Error),
     /// Unsupported JSON Schema keyword.
     #[error("unsupported JSON Schema keyword: {0}")]
-    UnsupportedKeyword(String),
+    UnsupportedKeyword(&'static str),
     /// Duplicate type name in $defs.
     #[error("duplicate type name in $defs: '{0}'")]
     DuplicateTypeDef(String),
     /// Referenced type could not be found in $defs.
     #[error("referenced type not found in $defs: {0}")]
     UndefinedType(String),
-    /// Other invalid schema structure.
-    #[error("{0}")]
-    InvalidSchema(String),
 }
 
 #[cfg(test)]

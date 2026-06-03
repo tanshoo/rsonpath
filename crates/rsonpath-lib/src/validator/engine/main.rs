@@ -292,14 +292,12 @@ where
                     return Ok(*target_state);
                 }
                 AdditionalProperties::True => {
-                    return Err(ValidatorEngineError::UnsupportedFeature(
-                        "additionalProperties: true".into(),
-                    ))
+                    return Err(ValidatorEngineError::UnsupportedFeature("additionalProperties: true"));
                 }
             }
         }
 
-        Err(ValidatorEngineError::TypeMismatch(idx, "object".into()))
+        Err(ValidatorEngineError::TypeMismatch(idx))
     }
 
     /// Trigger the transition to the `next_state` into a new subtree.
@@ -325,7 +323,7 @@ where
             (SchemaNode::Number, b'-' | b'0'..=b'9') => Ok(()),
             (SchemaNode::Boolean, b't' | b'f') => Ok(()),
             (SchemaNode::Null, b'n') => Ok(()),
-            _ => Err(ValidatorEngineError::TypeMismatch(idx, "type".into())),
+            _ => Err(ValidatorEngineError::TypeMismatch(idx)),
         }
     }
 

@@ -20,13 +20,13 @@ pub enum ValidatorEngineError {
     DisallowedProperty(usize),
     /// Type mismatch between the schema and the document.
     /// The inner [`usize`] value indicates the position of the value that caused the mismatch.
-    #[error("Type mismatch at position {0}. Expected: {1}")]
-    TypeMismatch(usize, String),
+    #[error("Type mismatch at position {0}")]
+    TypeMismatch(usize),
     /// Unexpected structural character in the document.
     /// The inner [`usize`] value indicates the position of the character.
     #[error("Unexpected structural character at position {0}")]
     UnexpectedStructural(usize),
     /// Unsupported JSON Schema feature.
     #[error("Unsupported JSON Schema feature: {0}")]
-    UnsupportedFeature(String),
+    UnsupportedFeature(&'static str),
 }
