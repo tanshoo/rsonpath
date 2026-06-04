@@ -91,6 +91,8 @@ pub struct ObjectConstraints {
     /// Maps property names to their corresponding schema nodes.
     properties: Box<[(StringPattern, SchemaNodeId)]>,
     additional_properties: AdditionalProperties,
+    min_properties: JsonUInt,
+    max_properties: JsonUInt,
 }
 
 /// Possible values for "additionalProperties" in JSON Schema.
@@ -110,10 +112,14 @@ impl ObjectConstraints {
     pub(crate) fn new(
         properties: Box<[(StringPattern, SchemaNodeId)]>,
         additional_properties: AdditionalProperties,
+        min_properties: Option<JsonUInt>,
+        max_properties: Option<JsonUInt>,
     ) -> Self {
         Self {
             properties,
             additional_properties,
+            min_properties: min_properties.unwrap_or(JsonUInt::ZERO),
+            max_properties: max_properties.unwrap_or(JsonUInt::MAX),
         }
     }
 
@@ -125,6 +131,16 @@ impl ObjectConstraints {
     #[inline]
     pub(crate) fn additional_properties(&self) -> &AdditionalProperties {
         &self.additional_properties
+    }
+
+    #[inline]
+    pub(crate) fn min_properties(&self) -> JsonUInt {
+        self.min_properties
+    }
+
+    #[inline]
+    pub(crate) fn max_properties(&self) -> JsonUInt {
+        self.max_properties
     }
 }
 

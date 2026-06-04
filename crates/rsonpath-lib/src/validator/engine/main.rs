@@ -236,6 +236,8 @@ where
         // Complex type constraints are validated at the closing of a subtree.
         if self.is_array {
             self.validate_array_constraints(idx, &self.schema[self.state])?;
+        } else {
+            self.validate_object_constraints(idx, &self.schema[self.state])?;
         }
 
         // Restore the state from the stack.
@@ -356,6 +358,19 @@ where
             }
             if arr_constr.max_items() < self.count {
                 return Err(ValidatorEngineError::MaxItemsInvalid(idx));
+            }
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn validate_object_constraints(&self, idx: usize, obj: &SchemaNode) -> Result<(), ValidatorEngineError> {
+        if let SchemaNode::Object(obj_constr) = obj {
+            if obj_constr.min_properties() > self.count {
+                return Err(ValidatorEngineError::MinPropertiesInvalid(idx));
+            }
+            if obj_constr.max_properties() < self.count {
+                return Err(ValidatorEngineError::MaxPropertiesInvalid(idx));
             }
         }
         Ok(())

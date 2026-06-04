@@ -95,9 +95,14 @@ impl SchemaParser {
             };
         }
 
+        let min_properties = self.parse_uint_field(value, "minProperties");
+        let max_properties = self.parse_uint_field(value, "maxProperties");
+
         let node_id = self.add_node(SchemaNode::Object(ObjectConstraints::new(
             properties.into_boxed_slice(),
             additional_properties,
+            min_properties,
+            max_properties,
         )));
         Ok(node_id)
     }
