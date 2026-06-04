@@ -111,7 +111,6 @@ where
         let quote_classifier = self.simd.classify_quoted_sequences(iter);
         let structural_classifier = self.simd.classify_structural_characters(quote_classifier);
         let mut classifier = structural_classifier;
-        classifier.turn_colons_and_commas_on(0);
 
         if let Some((idx, c)) = self.input.seek_non_whitespace_forward(0).e()? {
             self.next_state = self.transition_on_type(idx, c, &self.schema[self.state])?;
@@ -146,8 +145,8 @@ where
                     match event {
                         Structural::Colon(idx) => eng.handle_colon(idx)?,
                         Structural::Comma(idx) => eng.handle_comma(idx)?,
-                        Structural::Opening(b, idx) => eng.handle_opening(b, idx)?,
-                        Structural::Closing(_, idx) => eng.handle_closing(idx)?,
+                        Structural::Opening(b, idx) => eng.handle_opening(classifier, b, idx)?,
+                        Structural::Closing(_, idx) => eng.handle_closing(classifier, idx)?,
                     }
                 } else {
                     break;
@@ -203,7 +202,12 @@ where
 
     /// Handle the opening of a subtree with given `bracket_type` at index `idx`.
     #[inline(always)]
-    fn handle_opening(&mut self, bracket_type: BracketType, idx: usize) -> Result<(), ValidatorEngineError> {
+    fn handle_opening(
+        &mut self,
+        classifier: &mut Classifier!(),
+        bracket_type: BracketType,
+        idx: usize,
+    ) -> Result<(), ValidatorEngineError> {
         debug!("Opening {bracket_type:?} and pushing stack.",);
 
         self.transition_to_next(bracket_type);
@@ -224,13 +228,18 @@ where
                     self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
                 }
             }
+            classifier.turn_colons_off();
+            classifier.turn_commas_on(idx);
+        } else {
+            classifier.turn_commas_off();
+            classifier.turn_colons_on(idx);
         }
         Ok(())
     }
 
     /// Handle the closing of a subtree at index `idx`.
     #[inline(always)]
-    fn handle_closing(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
+    fn handle_closing(&mut self, classifier: &mut Classifier!(), idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Closing and popping stack.");
 
         // Complex type constraints are validated at the closing of a subtree.
@@ -247,6 +256,14 @@ where
         self.state = frame.state;
         self.is_array = frame.is_array;
         self.count = frame.count;
+
+        if self.is_array {
+            classifier.turn_colons_off();
+            classifier.turn_commas_on(idx);
+        } else {
+            classifier.turn_commas_off();
+            classifier.turn_colons_on(idx);
+        }
 
         Ok(())
     }
