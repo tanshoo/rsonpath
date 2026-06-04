@@ -166,7 +166,7 @@ where
         debug!("Colon");
 
         // Check object properties to find a matching transition.
-        self.next_state = self.find_transition_on_object_property(idx)?;
+        self.next_state = self.transition_on_property(idx)?;
         if self.count.try_increment().is_err() {
             return Ok(());
         }
@@ -244,15 +244,14 @@ where
         Ok(())
     }
 
-    /// Find the schema transition for the object property whose name
-    /// precedes the colon at index `idx`. Return the target state if found.
+    /// Transition based on the current object's property name that precedes the colon at index `idx`.
     ///
     /// Errors:
     /// - [`ValidatorEngineError::DisallowedProperty`] if the property
     ///   is not allowed by `properties` and `additionalProperties`.
     /// - [`ValidatorEngineError::TypeMismatch`] if the current schema node
     ///   is not an object.
-    fn find_transition_on_object_property(&self, idx: usize) -> Result<SchemaNodeId, ValidatorEngineError> {
+    fn transition_on_property(&self, idx: usize) -> Result<SchemaNodeId, ValidatorEngineError> {
         let obj_state = &self.schema[self.state];
 
         // The colon can be preceded by whitespace before the actual label.
