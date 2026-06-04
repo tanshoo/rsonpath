@@ -22,6 +22,14 @@ pub enum ValidatorEngineError {
     /// The inner [`usize`] value indicates the position of the value that caused the mismatch.
     #[error("Type mismatch at position {0}")]
     TypeMismatch(usize),
+    /// `minItems` validation failed for an array instance.
+    /// The inner [`usize`] value indicates the position of the closing bracket of the array.
+    #[error("Array instance at {0} has size less than `minItems`.")]
+    MinItemsInvalid(usize),
+    /// `maxItems` validation failed for an array instance.
+    /// The inner [`usize`] value indicates the position of the closing bracket of the array.
+    #[error("Array instance at {0} has size greater than `maxItems`.")]
+    MaxItemsInvalid(usize),
     /// Unexpected structural character in the document.
     /// The inner [`usize`] value indicates the position of the character.
     #[error("Unexpected structural character at position {0}")]

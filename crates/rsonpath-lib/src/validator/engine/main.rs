@@ -233,6 +233,11 @@ where
     fn handle_closing(&mut self, idx: usize) -> Result<(), ValidatorEngineError> {
         debug!("Closing and popping stack.");
 
+        // Complex type constraints are validated at the closing of a subtree.
+        if self.is_array {
+            self.validate_array_constraints(idx, &self.schema[self.state])?;
+        }
+
         // Restore the state from the stack.
         let frame = self.stack.pop().ok_or_else(|| {
             ValidatorEngineError::RsonpathEngineError(RsonpathEngineError::DepthBelowZero(idx, DepthError::BelowZero))
@@ -341,6 +346,19 @@ where
         } else {
             Ok(())
         }
+    }
+
+    #[inline(always)]
+    fn validate_array_constraints(&self, idx: usize, arr: &SchemaNode) -> Result<(), ValidatorEngineError> {
+        if let SchemaNode::Array(arr_constr) = arr {
+            if arr_constr.min_items() > self.count {
+                return Err(ValidatorEngineError::MinItemsInvalid(idx));
+            }
+            if arr_constr.max_items() < self.count {
+                return Err(ValidatorEngineError::MaxItemsInvalid(idx));
+            }
+        }
+        Ok(())
     }
 }
 

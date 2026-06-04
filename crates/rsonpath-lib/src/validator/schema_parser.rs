@@ -4,10 +4,9 @@ use crate::validator::schema_automaton::{
     AdditionalProperties, ArrayConstraints, JsonType, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
     TypeConstraints,
 };
-use rsonpath_syntax::str::JsonString;
+use rsonpath_syntax::{num::JsonUInt, str::JsonString};
 use serde_json::Value;
 use smallvec::SmallVec;
-
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -110,7 +109,10 @@ impl SchemaParser {
         } else {
             self.add_node(SchemaNode::Any)
         };
-        Ok(self.add_node(SchemaNode::Array(ArrayConstraints::new(items))))
+        let min_items = self.parse_uint_field(value, "minItems");
+        let max_items = self.parse_uint_field(value, "maxItems");
+
+        Ok(self.add_node(SchemaNode::Array(ArrayConstraints::new(items, min_items, max_items))))
     }
 
     fn parse_primitive_string(&mut self) -> Result<SchemaNodeId, SchemaParseError> {
@@ -136,6 +138,14 @@ impl SchemaParser {
             .get(&make_key(ref_name))
             .ok_or_else(|| SchemaParseError::UndefinedType(ref_name.to_string()))?;
         Ok(*def_id)
+    }
+
+    #[inline]
+    fn parse_uint_field(&self, value: &Value, key: &str) -> Option<JsonUInt> {
+        value
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .and_then(|u| JsonUInt::try_from(u).ok())
     }
 }
 
@@ -215,6 +225,9 @@ pub enum SchemaParseError {
     /// Referenced type could not be found in $defs.
     #[error("referenced type not found in $defs: {0}")]
     UndefinedType(String),
+    /// Other invalid schema structure.
+    #[error("{0}")]
+    InvalidSchema(&'static str),
 }
 
 #[cfg(test)]

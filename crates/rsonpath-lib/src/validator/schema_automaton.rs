@@ -1,5 +1,6 @@
 //! Automaton representation of a JSON Schema.
 use crate::string_pattern::StringPattern;
+use rsonpath_syntax::num::JsonUInt;
 use std::{fmt::Display, ops::Index};
 
 /// Identifier of a [`SchemaNode`].
@@ -130,18 +131,39 @@ impl ObjectConstraints {
 /// JSON Schema array constraints.
 #[derive(Debug, Clone)]
 pub struct ArrayConstraints {
-    /// Schema node describing the items in the array.
+    /// "items" applies its subschema to all instance array elements.
     items: SchemaNodeId,
+    /// An array instance is valid against "minItems" if its size is greater than,
+    /// or equal to, the value of this keyword.
+    /// Omitting this keyword has the same behavior as a value of 0.
+    min_items: JsonUInt,
+    /// An array instance is valid against "maxItems" if its size is less than,
+    /// or equal to, the value of this keyword.
+    max_items: JsonUInt,
 }
 
 impl ArrayConstraints {
-    pub(crate) fn new(items: SchemaNodeId) -> Self {
-        Self { items }
+    pub(crate) fn new(items: SchemaNodeId, min_items: Option<JsonUInt>, max_items: Option<JsonUInt>) -> Self {
+        Self {
+            items,
+            min_items: min_items.unwrap_or(JsonUInt::ZERO),
+            max_items: max_items.unwrap_or(JsonUInt::MAX),
+        }
     }
 
     #[inline]
     pub(crate) fn items(&self) -> SchemaNodeId {
         self.items
+    }
+
+    #[inline]
+    pub(crate) fn min_items(&self) -> JsonUInt {
+        self.min_items
+    }
+
+    #[inline]
+    pub(crate) fn max_items(&self) -> JsonUInt {
+        self.max_items
     }
 }
 
