@@ -70,11 +70,7 @@ impl SchemaParser {
             }
         }
 
-        if constraints.len() == 1 {
-            Ok(constraints[0])
-        } else {
-            Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints))))
-        }
+        Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints.into_boxed_slice()))))
     }
 
     fn parse_object(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {

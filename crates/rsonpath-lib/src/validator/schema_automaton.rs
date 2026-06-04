@@ -113,11 +113,11 @@ impl ArrayConstraints {
 /// Transitions to the corresponding schema node based on the value type.
 #[derive(Debug, Clone)]
 pub struct TypeConstraints {
-    types: Vec<SchemaNodeId>,
+    types: Box<[SchemaNodeId]>,
 }
 
 impl TypeConstraints {
-    pub(crate) fn new(types: Vec<SchemaNodeId>) -> Self {
+    pub(crate) fn new(types: Box<[SchemaNodeId]>) -> Self {
         Self { types }
     }
 

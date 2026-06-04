@@ -114,7 +114,7 @@ where
         classifier.turn_colons_and_commas_on(0);
 
         if let Some((idx, c)) = self.input.seek_non_whitespace_forward(0).e()? {
-            self.validate_type(idx, c, &self.schema[self.state])?;
+            self.next_state = self.transition_on_type(idx, c, &self.schema[self.state])?;
         }
 
         self.run(&mut classifier)?;
@@ -172,7 +172,7 @@ where
         }
         // Check if the value following the colon matches the expected type.
         if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-            self.validate_type(new_idx, c, &self.schema[self.next_state])?;
+            self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
         }
         Ok(())
     }
@@ -193,7 +193,7 @@ where
                 }
                 // Check if the value following the comma matches the expected type.
                 if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
-                    self.validate_type(new_idx, c, &self.schema[self.next_state])?;
+                    self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
                 }
             }
         }
@@ -221,7 +221,7 @@ where
                         return Ok(());
                     }
                     // Check if the value following the comma matches the expected type.
-                    self.validate_type(new_idx, c, &self.schema[self.next_state])?;
+                    self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
                 }
             }
         }
@@ -315,16 +315,34 @@ where
     /// Validate that the value starting at index `idx` with character `c`,
     /// matches the type expected by `node`.
     #[inline(always)]
-    fn validate_type(&self, idx: usize, c: u8, node: &SchemaNode) -> Result<(), ValidatorEngineError> {
-        match (node, c) {
-            (SchemaNode::Object(_), b'{') => Ok(()),
-            (SchemaNode::Array(_), b'[') => Ok(()),
-            (SchemaNode::Str, b'"') => Ok(()),
-            (SchemaNode::Number, b'-' | b'0'..=b'9') => Ok(()),
-            (SchemaNode::Boolean, b't' | b'f') => Ok(()),
-            (SchemaNode::Null, b'n') => Ok(()),
-            _ => Err(ValidatorEngineError::TypeMismatch(idx)),
+    fn validate_type(&self, c: u8, node: &SchemaNode) -> bool {
+        matches!(
+            (node, c),
+            (SchemaNode::Object(_), b'{')
+                | (SchemaNode::Array(_), b'[')
+                | (SchemaNode::Str, b'"')
+                | (SchemaNode::Number, b'-' | b'0'..=b'9')
+                | (SchemaNode::Boolean, b't' | b'f')
+                | (SchemaNode::Null, b'n')
+        )
+    }
+
+    #[inline(always)]
+    fn transition_on_type(
+        &mut self,
+        idx: usize,
+        c: u8,
+        node: &SchemaNode,
+    ) -> Result<SchemaNodeId, ValidatorEngineError> {
+        if let SchemaNode::Type(types) = node {
+            for &target_state in types.types() {
+                let target_node = &self.schema[target_state];
+                if self.validate_type(c, target_node) {
+                    return Ok(target_state);
+                }
+            }
         }
+        Err(ValidatorEngineError::TypeMismatch(idx))
     }
 
     /// Verify that we have reached zero depth, raise an error if not.
