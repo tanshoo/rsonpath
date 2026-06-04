@@ -1,7 +1,7 @@
 //! JSON Schema parser.
 use crate::string_pattern::StringPattern;
 use crate::validator::schema_automaton::{
-    AdditionalProperties, ArrayConstraints, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
+    AdditionalProperties, ArrayConstraints, JsonType, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
     TypeConstraints,
 };
 use rsonpath_syntax::str::JsonString;
@@ -58,19 +58,20 @@ impl SchemaParser {
             _ => SmallVec::from_slice(&Self::DEFAULT_TYPES),
         };
 
-        let mut constraints = Vec::new();
+        let mut constraints = [None; 6];
+
         for type_str in types {
             match type_str {
-                "object" => constraints.push(self.parse_object(value)?),
-                "array" => constraints.push(self.parse_array(value)?),
-                "string" => constraints.push(self.parse_primitive_string()?),
-                "number" | "integer" => constraints.push(self.parse_primitive_number()?),
-                "boolean" => constraints.push(self.parse_primitive_boolean()?),
-                _ => constraints.push(self.parse_primitive_null()?),
+                "object" => constraints[JsonType::Object as usize] = Some(self.parse_object(value)?),
+                "array" => constraints[JsonType::Array as usize] = Some(self.parse_array(value)?),
+                "string" => constraints[JsonType::String as usize] = Some(self.parse_primitive_string()?),
+                "number" | "integer" => constraints[JsonType::Number as usize] = Some(self.parse_primitive_number()?),
+                "boolean" => constraints[JsonType::Boolean as usize] = Some(self.parse_primitive_boolean()?),
+                _ => constraints[JsonType::Null as usize] = Some(self.parse_primitive_null()?),
             }
         }
 
-        Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints.into_boxed_slice()))))
+        Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints))))
     }
 
     fn parse_object(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {

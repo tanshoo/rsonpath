@@ -9,6 +9,7 @@ pub struct SchemaNodeId(pub(crate) u32);
 impl Index<SchemaNodeId> for SchemaAutomaton {
     type Output = SchemaNode;
 
+    #[inline(always)]
     fn index(&self, index: SchemaNodeId) -> &Self::Output {
         &self.nodes[index.0 as usize]
     }
@@ -46,6 +47,41 @@ pub enum SchemaNode {
     /// It can be assumed that every SchemaNodeId in the vector
     /// represents a different type.
     Type(TypeConstraints),
+}
+
+/// Represents a primitive JSON type.
+/// Used for type dispatch in [`SchemaNode::Type`].
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum JsonType {
+    /// Object: '{'
+    Object,
+    /// Array: '['
+    Array,
+    /// String: '"'
+    String,
+    /// Number: '-', '0'..'9'
+    Number,
+    /// Boolean: 't', 'f'
+    Boolean,
+    /// Null: 'n'
+    Null,
+}
+
+impl JsonType {
+    /// Determine the JSON type based on the first byte of the value.
+    /// The value is assumed to be of a valid primitive JSON type.
+    #[inline(always)]
+    pub fn from_byte(b: u8) -> Self {
+        match b {
+            b'{' => JsonType::Object,
+            b'[' => JsonType::Array,
+            b'"' => JsonType::String,
+            b't' | b'f' => JsonType::Boolean,
+            b'n' => JsonType::Null,
+            _ => JsonType::Number,
+        }
+    }
 }
 
 /// JSON Schema object constraints.
@@ -113,17 +149,21 @@ impl ArrayConstraints {
 /// Transitions to the corresponding schema node based on the value type.
 #[derive(Debug, Clone)]
 pub struct TypeConstraints {
-    types: Box<[SchemaNodeId]>,
+    types: [Option<SchemaNodeId>; 6],
 }
 
 impl TypeConstraints {
-    pub(crate) fn new(types: Box<[SchemaNodeId]>) -> Self {
+    pub(crate) fn new(types: [Option<SchemaNodeId>; 6]) -> Self {
         Self { types }
     }
+}
 
-    #[inline]
-    pub(crate) fn types(&self) -> &[SchemaNodeId] {
-        &self.types
+impl Index<JsonType> for TypeConstraints {
+    type Output = Option<SchemaNodeId>;
+
+    #[inline(always)]
+    fn index(&self, index: JsonType) -> &Self::Output {
+        &self.types[index as usize]
     }
 }
 

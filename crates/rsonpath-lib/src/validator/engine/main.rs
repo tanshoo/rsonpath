@@ -1,7 +1,7 @@
 //! Main implementation of a JSON Schema validator engine.
 use crate::classification::structural::BracketType;
 use crate::error::DepthError;
-use crate::validator::schema_automaton::{AdditionalProperties, SchemaAutomaton, SchemaNode, SchemaNodeId};
+use crate::validator::schema_automaton::{AdditionalProperties, JsonType, SchemaAutomaton, SchemaNode, SchemaNodeId};
 use crate::validator::schema_parser::{parse_schema, SchemaParseError};
 use crate::{
     classification::{
@@ -312,21 +312,11 @@ where
         self.count = JsonUInt::ZERO;
     }
 
-    /// Validate that the value starting at index `idx` with character `c`,
-    /// matches the type expected by `node`.
-    #[inline(always)]
-    fn validate_type(&self, c: u8, node: &SchemaNode) -> bool {
-        matches!(
-            (node, c),
-            (SchemaNode::Object(_), b'{')
-                | (SchemaNode::Array(_), b'[')
-                | (SchemaNode::Str, b'"')
-                | (SchemaNode::Number, b'-' | b'0'..=b'9')
-                | (SchemaNode::Boolean, b't' | b'f')
-                | (SchemaNode::Null, b'n')
-        )
-    }
-
+    /// Transition based on the type of the value starting at index `idx`.
+    ///
+    /// Errors:
+    /// - [`ValidatorEngineError::TypeMismatch`] if there is no valid transition
+    ///   for the given type.
     #[inline(always)]
     fn transition_on_type(
         &mut self,
@@ -335,11 +325,9 @@ where
         node: &SchemaNode,
     ) -> Result<SchemaNodeId, ValidatorEngineError> {
         if let SchemaNode::Type(types) = node {
-            for &target_state in types.types() {
-                let target_node = &self.schema[target_state];
-                if self.validate_type(c, target_node) {
-                    return Ok(target_state);
-                }
+            let json_type = JsonType::from_byte(c);
+            if let Some(target_state) = types[json_type] {
+                return Ok(target_state);
             }
         }
         Err(ValidatorEngineError::TypeMismatch(idx))
