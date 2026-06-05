@@ -314,9 +314,7 @@ where
                 AdditionalProperties::Schema(target_state) => {
                     return Ok(*target_state);
                 }
-                AdditionalProperties::True => {
-                    return Err(ValidatorEngineError::UnsupportedFeature("additionalProperties: true"));
-                }
+                AdditionalProperties::True => {}
             }
         }
 

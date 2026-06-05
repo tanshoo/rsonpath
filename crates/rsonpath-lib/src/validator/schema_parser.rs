@@ -18,6 +18,8 @@ pub struct SchemaParser {
     nodes: Vec<SchemaNode>,
     /// Maps type names in $defs to their corresponding nodes.
     defs: HashMap<StringPattern, SchemaNodeId>,
+    /// Node representing the `true` schema (accepts everything).
+    true_schema: SchemaNodeId,
 }
 
 impl SchemaParser {
@@ -26,10 +28,41 @@ impl SchemaParser {
     /// Create a new parser.
     #[inline]
     fn new() -> Self {
-        Self {
+        let mut parser = Self {
             nodes: Vec::new(),
             defs: HashMap::new(),
+            true_schema: SchemaNodeId(0), // temporary
+        };
+
+        parser.true_schema = parser.add_true_schema();
+        parser
+    }
+
+    fn add_true_schema(&mut self) -> SchemaNodeId {
+        let true_schema = self.reserve_node();
+        let atomic_true_schema = self.add_node(SchemaNode::Null);
+        let obj_true_schema = self.reserve_node();
+        let arr_true_schema = self.reserve_node();
+
+        let mut type_constr = [None; 6];
+        type_constr[JsonType::Object as usize] = Some(obj_true_schema);
+        type_constr[JsonType::Array as usize] = Some(arr_true_schema);
+        // Atomic types (string, number, boolean, null) share the same node.
+        for &t in &[JsonType::String, JsonType::Number, JsonType::Boolean, JsonType::Null] {
+            type_constr[t as usize] = Some(atomic_true_schema);
         }
+        self.nodes[true_schema.0 as usize] = SchemaNode::Type(TypeConstraints::new(type_constr));
+
+        self.nodes[obj_true_schema.0 as usize] = SchemaNode::Object(ObjectConstraints::new(
+            Box::new([]),
+            AdditionalProperties::Schema(true_schema),
+            None,
+            None,
+        ));
+
+        self.nodes[arr_true_schema.0 as usize] = SchemaNode::Array(ArrayConstraints::new(true_schema, None, None));
+
+        true_schema
     }
 
     /// Add a new schema node and return its id.
@@ -39,9 +72,16 @@ impl SchemaParser {
         SchemaNodeId(self.nodes.len() as u32 - 1)
     }
 
+    /// Insert a placeholder node and return its id.
+    #[inline]
+    fn reserve_node(&mut self) -> SchemaNodeId {
+        self.nodes.push(SchemaNode::Null);
+        SchemaNodeId(self.nodes.len() as u32 - 1)
+    }
+
     fn parse(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
         if let Value::Bool(true) = value {
-            return Ok(self.add_node(SchemaNode::Any));
+            return Ok(self.true_schema);
         } else if let Value::Bool(false) = value {
             return Err(SchemaParseError::UnsupportedKeyword("false"));
         }
@@ -89,7 +129,7 @@ impl SchemaParser {
         // additionalProperties
         if let Some(additional) = value.get("additionalProperties") {
             additional_properties = match additional {
-                Value::Bool(true) => AdditionalProperties::True,
+                Value::Bool(true) => AdditionalProperties::Schema(self.true_schema),
                 Value::Bool(false) => AdditionalProperties::False,
                 _ => AdditionalProperties::Schema(self.parse(additional)?),
             };
@@ -112,7 +152,7 @@ impl SchemaParser {
         let items = if let Some(items_schema) = value.get("items") {
             self.parse(items_schema)?
         } else {
-            self.add_node(SchemaNode::Any)
+            self.true_schema
         };
         let min_items = self.parse_uint_field(value, "minItems");
         let max_items = self.parse_uint_field(value, "maxItems");
@@ -163,7 +203,8 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
 
     // Schema can be `true` (accepts everything), `false` (accepts nothing) or an object.
     if let Value::Bool(true) = schema {
-        return Ok(SchemaAutomaton::new(vec![SchemaNode::Any], SchemaNodeId(0)));
+        let parser = SchemaParser::new();
+        return Ok(SchemaAutomaton::new(parser.nodes, parser.true_schema));
     } else if let Value::Bool(false) = schema {
         return Err(SchemaParseError::UnsupportedKeyword("false"));
     }
@@ -180,7 +221,7 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
                 Err(SchemaParseError::DuplicateTypeDef(type_name.clone()))?
             }
             // Insert a placeholder, will be replaced with actual node after parsing.
-            let def_id = parser.add_node(SchemaNode::Null);
+            let def_id = parser.reserve_node();
             parser.defs.insert(key, def_id);
         }
 

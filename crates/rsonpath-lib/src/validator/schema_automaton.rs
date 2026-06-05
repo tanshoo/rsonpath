@@ -7,15 +7,6 @@ use std::{fmt::Display, ops::Index};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct SchemaNodeId(pub(crate) u32);
 
-impl Index<SchemaNodeId> for SchemaAutomaton {
-    type Output = SchemaNode;
-
-    #[inline(always)]
-    fn index(&self, index: SchemaNodeId) -> &Self::Output {
-        &self.nodes[index.0 as usize]
-    }
-}
-
 impl Display for SchemaNodeId {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,8 +21,6 @@ impl Display for SchemaNodeId {
 /// applicable at a given point.
 #[derive(Debug, Clone)]
 pub enum SchemaNode {
-    /// Any value is accepted.
-    Any,
     /// Object type.
     Object(ObjectConstraints),
     /// Array type.
@@ -230,5 +219,14 @@ impl SchemaAutomaton {
     #[inline]
     pub(crate) fn root(&self) -> SchemaNodeId {
         self.root
+    }
+}
+
+impl Index<SchemaNodeId> for SchemaAutomaton {
+    type Output = SchemaNode;
+
+    #[inline(always)]
+    fn index(&self, index: SchemaNodeId) -> &Self::Output {
+        &self.nodes[index.0 as usize]
     }
 }
