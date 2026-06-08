@@ -3,6 +3,7 @@ use crate::classification::structural::BracketType;
 use crate::error::DepthError;
 use crate::validator::schema_automaton::{AdditionalProperties, JsonType, SchemaAutomaton, SchemaNode, SchemaNodeId};
 use crate::validator::schema_parser::{parse_schema, SchemaParseError};
+use crate::validator::well_formedness::{NoWellFormednessCheck, WellFormednessCheck};
 use crate::{
     classification::{
         simd::{self, config_simd, dispatch_simd, Simd, SimdConfiguration},
@@ -24,23 +25,43 @@ use smallvec::{smallvec, SmallVec};
 /// The engine is stateless, meaning that it can be executed
 /// on any number of separate inputs, even on separate threads.
 #[derive(Clone, Debug)]
-pub struct ValidatorEngine {
+pub struct ValidatorEngine<W = NoWellFormednessCheck> {
     schema: SchemaAutomaton,
     simd: SimdConfiguration,
+    well_formedness_check: W,
 }
 
-impl ValidatorEngine {
-    /// Compile a JSON Schema from a string into an [`ValidatorEngine`].
+impl ValidatorEngine<NoWellFormednessCheck> {
+    /// Compile a JSON Schema from a string into a [`ValidatorEngine`].
     pub fn compile_schema(schema_str: &str) -> Result<Self, SchemaParseError> {
         let schema = parse_schema(schema_str)?;
         let simd = simd::configure();
-        Ok(Self { schema, simd })
+        Ok(Self {
+            schema,
+            simd,
+            well_formedness_check: NoWellFormednessCheck,
+        })
     }
 
     /// Turn a compiled [`SchemaAutomaton`] into a [`ValidatorEngine`].
     pub fn from_compiled_schema(schema: SchemaAutomaton) -> Self {
         let simd = simd::configure();
-        Self { schema, simd }
+        Self {
+            schema,
+            simd,
+            well_formedness_check: NoWellFormednessCheck,
+        }
+    }
+}
+
+impl<W: WellFormednessCheck> ValidatorEngine<W> {
+    /// Create a new engine with a specific well-formedness check.
+    pub fn with_well_formedness_check<T: WellFormednessCheck>(self, well_formedness_check: T) -> ValidatorEngine<T> {
+        ValidatorEngine {
+            schema: self.schema,
+            simd: self.simd,
+            well_formedness_check,
+        }
     }
 
     /// Validate the input against the schema.
@@ -49,7 +70,7 @@ impl ValidatorEngine {
         I: Input,
     {
         config_simd!(self.simd => |simd| {
-            let executor = Executor::new(&self.schema, input, simd);
+            let executor = Executor::new(&self.schema, input, simd, self.well_formedness_check.clone());
             executor.run_and_exit()
         })?;
 
@@ -66,7 +87,7 @@ macro_rules! Classifier {
 }
 
 /// This is the heart of an Engine run that holds the entire execution state.
-struct Executor<'i, I, V> {
+struct Executor<'i, I, V, W> {
     /// Current schema node.
     state: SchemaNodeId,
     /// Next schema node.
@@ -84,14 +105,17 @@ struct Executor<'i, I, V> {
     input: &'i I,
     /// Resolved SIMD context.
     simd: V,
+    /// Structural well-formedness check.
+    well_formedness_check: W,
 }
 
-impl<'i, I, V> Executor<'i, I, V>
+impl<'i, I, V, W> Executor<'i, I, V, W>
 where
     I: Input,
     V: Simd,
+    W: WellFormednessCheck,
 {
-    fn new(schema: &'i SchemaAutomaton, input: &'i I, simd: V) -> Self {
+    fn new(schema: &'i SchemaAutomaton, input: &'i I, simd: V, well_formedness_check: W) -> Self {
         Self {
             state: schema.root(),
             next_state: schema.root(),
@@ -101,6 +125,7 @@ where
             schema,
             input,
             simd,
+            well_formedness_check,
         }
     }
 
@@ -112,8 +137,13 @@ where
         let structural_classifier = self.simd.classify_structural_characters(quote_classifier);
         let mut classifier = structural_classifier;
 
+        if W::NEEDS_ALL_STRUCTURAL_EVENTS {
+            classifier.turn_colons_and_commas_on(0);
+        }
+
         if let Some((idx, c)) = self.input.seek_non_whitespace_forward(0).e()? {
             self.next_state = self.transition_on_type(idx, c, &self.schema[self.state])?;
+            self.well_formedness_check.update_last_atomic(idx);
         }
 
         self.run(&mut classifier)?;
@@ -125,14 +155,15 @@ where
     /// We loop through the document based on the `classifier`'s outputs.
     fn run(&mut self, classifier: &mut Classifier!()) -> Result<(), ValidatorEngineError> {
         dispatch_simd!(self.simd; self, classifier =>
-        fn<'i, I, V>(
-            eng: &mut Executor<'i, I, V>,
+        fn<'i, I, V, W>(
+            eng: &mut Executor<'i, I, V, W>,
             classifier: &mut Classifier!()
 
         ) -> Result<(), ValidatorEngineError>
         where
             I: Input,
-            V: Simd
+            V: Simd,
+            W: WellFormednessCheck
         {
             loop {
                 if let Some(event) = classifier.next().map_err(ValidatorEngineError::InputError)?.take() {
@@ -143,10 +174,22 @@ where
                     debug!("====================");
 
                     match event {
-                        Structural::Colon(idx) => eng.handle_colon(idx)?,
-                        Structural::Comma(idx) => eng.handle_comma(idx)?,
-                        Structural::Opening(b, idx) => eng.handle_opening(classifier, b, idx)?,
-                        Structural::Closing(_, idx) => eng.handle_closing(classifier, idx)?,
+                        Structural::Colon(idx) => {
+                            eng.well_formedness_check.on_colon(idx, eng.input)?;
+                            eng.handle_colon(idx)?;
+                        }
+                        Structural::Comma(idx) => {
+                            eng.well_formedness_check.on_comma(idx, eng.input)?;
+                            eng.handle_comma(idx)?;
+                        }
+                        Structural::Opening(b, idx) => {
+                            eng.well_formedness_check.on_opening(b, idx, eng.input)?;
+                            eng.handle_opening(classifier, b, idx)?;
+                        }
+                        Structural::Closing(b, idx) => {
+                            eng.well_formedness_check.on_closing(b, idx, eng.input)?;
+                            eng.handle_closing(classifier, idx)?;
+                        }
                     }
                 } else {
                     break;
@@ -172,6 +215,7 @@ where
         // Check if the value following the colon matches the expected type.
         if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
             self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
+            self.well_formedness_check.update_last_atomic(new_idx);
         }
         Ok(())
     }
@@ -193,6 +237,7 @@ where
                 // Check if the value following the comma matches the expected type.
                 if let Some((new_idx, c)) = self.input.seek_non_whitespace_forward(idx + 1).e()? {
                     self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
+                    self.well_formedness_check.update_last_atomic(new_idx);
                 }
             }
         }
@@ -226,13 +271,18 @@ where
                     }
                     // Check if the value following the comma matches the expected type.
                     self.next_state = self.transition_on_type(new_idx, c, &self.schema[self.next_state])?;
+                    self.well_formedness_check.update_last_atomic(new_idx);
                 }
             }
-            classifier.turn_colons_off();
-            classifier.turn_commas_on(idx);
+            if !W::NEEDS_ALL_STRUCTURAL_EVENTS {
+                classifier.turn_colons_off();
+                classifier.turn_commas_on(idx);
+            }
         } else {
-            classifier.turn_commas_off();
-            classifier.turn_colons_on(idx);
+            if !W::NEEDS_ALL_STRUCTURAL_EVENTS {
+                classifier.turn_commas_off();
+                classifier.turn_colons_on(idx);
+            }
         }
         Ok(())
     }
@@ -257,12 +307,14 @@ where
         self.is_array = frame.is_array;
         self.count = frame.count;
 
-        if self.is_array {
-            classifier.turn_colons_off();
-            classifier.turn_commas_on(idx);
-        } else {
-            classifier.turn_commas_off();
-            classifier.turn_colons_on(idx);
+        if !W::NEEDS_ALL_STRUCTURAL_EVENTS {
+            if self.is_array {
+                classifier.turn_colons_off();
+                classifier.turn_commas_on(idx);
+            } else {
+                classifier.turn_commas_off();
+                classifier.turn_colons_on(idx);
+            }
         }
 
         Ok(())
