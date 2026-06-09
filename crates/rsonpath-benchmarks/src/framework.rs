@@ -180,6 +180,20 @@ impl Benchset {
             .add_target(BenchTarget::SerdeJsonPath(query))
     }
 
+    pub fn add_all_validator_targets(self, schema: &str) -> Result<Self, BenchmarkError> {
+        let this = self
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::Boon(schema))?
+            .add_target(BenchTarget::JsonSchema(schema))?
+            .add_target(BenchTarget::Dja(schema))?
+            .add_target(BenchTarget::SpawnBaseline(schema))?;
+
+        #[cfg(feature = "blaze")]
+        let this = this.add_target(BenchTarget::Blaze(schema))?;
+
+        Ok(this)
+    }
+
     pub fn add_rust_native_targets(self, query: &str) -> Result<Self, BenchmarkError> {
         self.add_target(BenchTarget::RsonpathMmap(query, ResultType::Full))?
             .add_target(BenchTarget::JsonpathRust(query))?

@@ -511,30 +511,30 @@ pub const fn az_tenants() -> Dataset {
     }
 }
 
-pub const fn depth_3_props_4_len_10_10_seed_42() -> Dataset {
+pub const fn arr_5_depth_3_props_4_len_10_10_seed_42() -> Dataset {
     Dataset {
-        name: "depth_3_props_4_len_10_10_seed_42",
-        path: dataset_path!("depth_3_props_4_len_10_10_seed_42_instance.json"),
+        name: "arr_5_depth_3_props_4_len_10_10_seed_42",
+        path: dataset_path!("arr_5_depth_3_props_4_len_10_10_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("0fdd0fee91dfabee285a4781817673c639b0672ae0a2af89ea58519c62820fea"),
+        checksum: hex!("bdaeecb5671734a6614f82595628f5ce6afd7bf7311a728b9fbad4a32a90a030"),
     }
 }
 
-pub const fn depth_3_props_6_len_8_12_seed_42() -> Dataset {
+pub const fn arr_5_depth_3_props_6_len_8_12_seed_42() -> Dataset {
     Dataset {
-        name: "depth_3_props_6_len_8_12_seed_42",
-        path: dataset_path!("depth_3_props_6_len_8_12_seed_42_instance.json"),
+        name: "arr_5_depth_3_props_6_len_8_12_seed_42",
+        path: dataset_path!("arr_5_depth_3_props_6_len_8_12_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("d53ff22d8000f43404b9e6cf2e99a5cd98676a8267a70948747fcd68d4d21a82"),
+        checksum: hex!("ac1d5f2378869364aeb5cb452b2a649ba6ec7f98b8defa4fc0b1544385b1b788"),
     }
 }
 
-pub const fn depth_3_props_8_len_8_12_seed_42() -> Dataset {
+pub const fn arr_5_depth_3_props_8_len_8_12_seed_42() -> Dataset {
     Dataset {
-        name: "depth_3_props_8_len_8_12_seed_42",
-        path: dataset_path!("depth_3_props_8_len_8_12_seed_42_instance.json"),
+        name: "arr_5_depth_3_props_8_len_8_12_seed_42",
+        path: dataset_path!("arr_5_depth_3_props_8_len_8_12_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("d0d56a043da42f70e7407b0f322d6bf800cef5681a268443773d47a487e5648b"),
+        checksum: hex!("756ac90be345c17608ec06405f44dc90c601652a5d6789b6db939532d8564082"),
     }
 }
 
