@@ -1,9 +1,9 @@
 #include <sourcemeta/blaze/compiler.h>
 #include <sourcemeta/blaze/evaluator.h>
+#include <sourcemeta/blaze/foundation.h>
 
 #include <sourcemeta/core/io.h>
 #include <sourcemeta/core/json.h>
-#include <sourcemeta/core/jsonschema.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -73,8 +73,9 @@ extern "C"
       }
 
       auto compiled = sourcemeta::blaze::compile(
-          *schema, sourcemeta::core::schema_walker,
-          sourcemeta::core::schema_resolver,
+          *schema,
+          sourcemeta::blaze::schema_walker,
+          sourcemeta::blaze::schema_resolver,
           sourcemeta::blaze::default_schema_compiler,
           sourcemeta::blaze::Mode::FastValidation);
 

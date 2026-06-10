@@ -19,6 +19,7 @@ fn setup_blaze() -> Result<()> {
     let cmake_status = Command::new("cmake")
         .arg("-B")
         .arg("build")
+        .arg("-DCMAKE_BUILD_TYPE=Release")
         .current_dir("./src/implementations/blazeShim")
         .status()?;
     if !cmake_status.success() {
