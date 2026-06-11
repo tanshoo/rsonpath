@@ -194,6 +194,12 @@ impl Benchset {
         Ok(this)
     }
 
+    pub fn add_rsonschema_with_all_modes(self, schema: &str) -> Result<Self, BenchmarkError> {
+        self.add_target(BenchTarget::RsonschemaWellFormednessOnly(schema))?
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaWithWellFormedness(schema))
+    }
+
     pub fn add_rust_native_targets(self, query: &str) -> Result<Self, BenchmarkError> {
         self.add_target(BenchTarget::RsonpathMmap(query, ResultType::Full))?
             .add_target(BenchTarget::JsonpathRust(query))?
