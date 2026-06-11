@@ -84,3 +84,7 @@ harness = false
 [[bench]]
 name = "validator"
 harness = false
+
+[[bench]]
+name = "overhead"
+harness = false
