@@ -302,6 +302,33 @@ pub const fn ast() -> Dataset {
     }
 }
 
+pub const fn clang_10() -> Dataset {
+    Dataset {
+        name: "clang_10",
+        path: dataset_path!("clang/clang_10.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("3570ee25d6d101a26e8c72ab2c909656a8ed723a382fcf3aabd5595f16642374"),
+    }
+}
+
+pub const fn clang_50() -> Dataset {
+    Dataset {
+        name: "clang_50",
+        path: dataset_path!("clang/clang_50.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("17c0e2fa6e5b613e6302c1b1f166acf59c96a97f8e67980918d242f028a51bab"),
+    }
+}
+
+pub const fn clang_100() -> Dataset {
+    Dataset {
+        name: "clang_100",
+        path: dataset_path!("clang/clang_100.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("929cdebf3e30a5e14055268aebe31a5a713e86239390df419f0f2148517b8303"),
+    }
+}
+
 pub fn crossref(size: u32) -> Dataset {
     let source = DatasetSource::UrlTarArchive(
         DatasetArchive {

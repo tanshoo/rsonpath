@@ -189,8 +189,22 @@ impl Benchset {
     pub fn add_all_validator_targets(self, schema: &str) -> Result<Self, BenchmarkError> {
         let this = self
             .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaMmap(schema))?
             .add_target(BenchTarget::Boon(schema))?
             .add_target(BenchTarget::JsonSchema(schema))?
+            .add_target(BenchTarget::Dja(schema))?
+            .add_target(BenchTarget::SpawnBaseline(schema))?;
+
+        #[cfg(feature = "blaze")]
+        let this = this.add_target(BenchTarget::Blaze(schema))?;
+
+        Ok(this)
+    }
+
+    pub fn add_all_validator_targets_not_using_serde(self, schema: &str) -> Result<Self, BenchmarkError> {
+        let this = self
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaMmap(schema))?
             .add_target(BenchTarget::Dja(schema))?
             .add_target(BenchTarget::SpawnBaseline(schema))?;
 

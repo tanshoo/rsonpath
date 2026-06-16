@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "inner": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "loc": {
+          "$ref": "#/$defs/bareSourceLocation"
+        },
+        "range": {
+          "type": "object",
+          "properties": {
+            "begin": {
+              "$ref": "#/$defs/bareSourceLocation"
+            },
+            "end": {
+              "$ref": "#/$defs/bareSourceLocation"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "bareSourceLocation": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "presumedFile": {
+          "type": "string"
+        },
+        "presumedLine": {
+          "type": "integer"
+        },
+        "col": {
+          "type": "integer"
+        },
+        "tokLen": {
+          "type": "integer"
+        },
+        "includedFrom": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/node"
+  }
+}
