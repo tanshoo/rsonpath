@@ -1,0 +1,105 @@
+{
+	"type": "array",
+	"items": {
+		"type": "object",
+		"properties": {
+			"id": {
+				"type": "integer"
+			},
+			"case_number": {
+				"type": "string"
+			},
+			"date": {
+				"type": "string"
+			},
+			"block": {
+				"type": "string"
+			},
+			"iucr": {
+				"type": "string"
+			},
+			"primary_type": {
+				"type": "string"
+			},
+			"description": {
+				"type": "string"
+			},
+			"location_description": {
+				"type": "string"
+			},
+			"arrest": {
+				"type": "boolean"
+			},
+			"domestic": {
+				"type": "boolean"
+			},
+			"beat": {
+				"type": "string"
+			},
+			"district": {
+				"type": "string"
+			},
+			"ward": {
+				"type": "integer"
+			},
+			"community_area": {
+				"type": "string"
+			},
+			"fbi_code": {
+				"type": "string"
+			},
+			"x_coordinate": {
+				"type": "integer"
+			},
+			"y_coordinate": {
+				"type": "integer"
+			},
+			"year": {
+				"type": "integer"
+			},
+			"updated_on": {
+				"type": "string"
+			},
+			"latitude": {
+				"type": "number"
+			},
+			"longitude": {
+				"type": "number"
+			},
+			"location": {
+				"type": "object",
+				"properties": {
+					"latitude": {
+						"type": "number"
+					},
+					"longitude": {
+						"type": "number"
+					},
+					"human_address": {
+						"type": "object",
+						"properties": {
+							"address": {
+								"type": "string"
+							},
+							"city": {
+								"type": "string"
+							},
+							"state": {
+								"type": "string"
+							},
+							"zip": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			},
+			":@computed_region_awaf_s7ux": {
+				"type": "string"
+			},
+			":@computed_region_6mkv_f3dw": {
+				"type": "string"
+			}
+		}
+	}
+}

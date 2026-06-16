@@ -149,6 +149,51 @@ pub fn clang_100(c: &mut Criterion) -> Result<(), BenchmarkError> {
     Ok(())
 }
 
+pub fn crime_10k(c: &mut Criterion) -> Result<(), BenchmarkError> {
+    let schema = "./data/schemas/crime_schema.json";
+
+    let benchset = Benchset::new(
+        "overhead::crime_10k",
+        dataset::crime_10k(),
+    )?
+    .add_rsonschema_with_all_modes(schema)?
+    .finish();
+
+    benchset.run(c);
+
+    Ok(())
+}
+
+pub fn crime_100k(c: &mut Criterion) -> Result<(), BenchmarkError> {
+    let schema = "./data/schemas/crime_schema.json";
+
+    let benchset = Benchset::new(
+        "overhead::crime_100k",
+        dataset::crime_100k(),
+    )?
+    .add_rsonschema_with_all_modes(schema)?
+    .finish();
+
+    benchset.run(c);
+
+    Ok(())
+}
+
+pub fn crime_200k(c: &mut Criterion) -> Result<(), BenchmarkError> {
+    let schema = "./data/schemas/crime_schema.json";
+
+    let benchset = Benchset::new(
+        "overhead::crime_200k",
+        dataset::crime_200k(),
+    )?
+    .add_rsonschema_with_all_modes(schema)?
+    .finish();
+
+    benchset.run(c);
+
+    Ok(())
+}
+
 benchsets!(
     overhead_benches,
     arr_5_depth_3_props_4_len_10_10,
@@ -160,5 +205,8 @@ benchsets!(
     corporations_200k,
     clang_10,
     clang_50,
-    clang_100
+    clang_100,
+    crime_10k,
+    crime_100k,
+    crime_200k
 );

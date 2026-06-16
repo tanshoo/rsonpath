@@ -601,6 +601,33 @@ pub const fn corporations_200k() -> Dataset {
     }
 }
 
+pub const fn crime_10k() -> Dataset {
+    Dataset {
+        name: "crime_10k",
+        path: dataset_path!("crime/crime_10k.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("3bc37d13e1da6a8f5acaa7ed8f580d6e13172d9667c48635323c028124df1481"),
+    }
+}
+
+pub const fn crime_100k() -> Dataset {
+    Dataset {
+        name: "crime_100k",
+        path: dataset_path!("crime/crime_100k.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("62b5e4fde9f5bf026a4939e3aeaf0b28799df266aad3967085b5e362769abd3f"),
+    }
+}
+
+pub const fn crime_200k() -> Dataset {
+    Dataset {
+        name: "crime_200k",
+        path: dataset_path!("crime/crime_200k.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("4b4c0211931a1d2044e2fa886d1dc07f7c8df1e7c1a017dd62b7547fe1ba2535"),
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum DatasetError {
     #[error("Filesystem error: {0}")]
