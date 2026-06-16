@@ -1,8 +1,7 @@
 //! JSON Schema parser.
 use crate::string_pattern::StringPattern;
 use crate::validator::schema_automaton::{
-    AdditionalProperties, ArrayConstraints, JsonType, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId,
-    TypeConstraints,
+    ArrayConstraints, JsonType, ObjectConstraints, SchemaAutomaton, SchemaNode, SchemaNodeId, TypeConstraints,
 };
 use rsonpath_syntax::{num::JsonUInt, str::JsonString};
 use serde_json::Value;
@@ -54,12 +53,8 @@ impl SchemaParser {
         }
         self.nodes[true_schema.as_usize()] = SchemaNode::Type(TypeConstraints::new(type_constr));
 
-        self.nodes[obj_true_schema.as_usize()] = SchemaNode::Object(ObjectConstraints::new(
-            Box::new([]),
-            AdditionalProperties::Schema(true_schema),
-            None,
-            None,
-        ));
+        self.nodes[obj_true_schema.as_usize()] =
+            SchemaNode::Object(ObjectConstraints::new(Box::new([]), Some(true_schema), None, None));
 
         self.nodes[arr_true_schema.as_usize()] = SchemaNode::Array(ArrayConstraints::new(true_schema, None, None));
 
@@ -118,7 +113,6 @@ impl SchemaParser {
 
     fn parse_object(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
         let mut properties = Vec::new();
-        let mut additional_properties = AdditionalProperties::default();
 
         // properties
         if let Some(props_map) = value.get("properties").and_then(|p| p.as_object()) {
@@ -129,12 +123,14 @@ impl SchemaParser {
             }
         }
 
+        let mut additional_properties = Some(self.true_schema);
+
         // additionalProperties
         if let Some(additional) = value.get("additionalProperties") {
             additional_properties = match additional {
-                Value::Bool(true) => AdditionalProperties::Schema(self.true_schema),
-                Value::Bool(false) => AdditionalProperties::False,
-                _ => AdditionalProperties::Schema(self.parse(additional)?),
+                Value::Bool(true) => Some(self.true_schema),
+                Value::Bool(false) => None,
+                _ => Some(self.parse(additional)?),
             };
         }
 
@@ -354,7 +350,7 @@ mod tests {
         let age_num_id = get_type_node(&definition, age_prop_id, JsonType::Number);
         assert!(matches!(definition[age_num_id], SchemaNode::Number));
 
-        assert!(matches!(object.additional_properties(), AdditionalProperties::False));
+        assert!(object.additional_properties().is_none());
     }
 
     #[test]
@@ -377,13 +373,12 @@ mod tests {
         let name_str_id = get_type_node(&definition, name_prop_id, JsonType::String);
         assert!(matches!(definition[name_str_id], SchemaNode::Str));
 
-        match object.additional_properties() {
-            AdditionalProperties::Schema(id) => {
-                let add_obj_id = get_type_node(&definition, *id, JsonType::Object);
-                get_object_node(&definition, add_obj_id);
-            }
-            _ => panic!("expected Schema"),
-        }
+        let add_id = object.additional_properties().unwrap();
+        let SchemaNode::Type(add_type) = &definition[add_id] else {
+            panic!("expected type node")
+        };
+        let add_obj_id = add_type[JsonType::Object].expect("expected object type");
+        get_object_node(&definition, add_obj_id);
     }
 
     #[test]
@@ -410,7 +405,7 @@ mod tests {
         let next_prop_id = *get_property(object.properties(), "next").unwrap();
         assert_eq!(next_prop_id, root_id);
 
-        assert!(matches!(object.additional_properties(), AdditionalProperties::False));
+        assert!(object.additional_properties().is_none());
     }
 
     #[test]
@@ -434,23 +429,16 @@ mod tests {
         let root_id = definition.root();
         let root_obj_id = get_type_node(&definition, root_id, JsonType::Object);
         let root_object = get_object_node(&definition, root_obj_id);
+        assert!(root_object.additional_properties().is_none());
 
         let child_prop_id = *get_property(root_object.properties(), "child").unwrap();
         let child_obj_id = get_type_node(&definition, child_prop_id, JsonType::Object);
         let child_object = get_object_node(&definition, child_obj_id);
+        assert!(child_object.additional_properties().is_none());
 
         let name_prop_id = *get_property(child_object.properties(), "name").unwrap();
         let name_str_id = get_type_node(&definition, name_prop_id, JsonType::String);
         assert!(matches!(definition[name_str_id], SchemaNode::Str));
-
-        assert!(matches!(
-            root_object.additional_properties(),
-            AdditionalProperties::False
-        ));
-        assert!(matches!(
-            child_object.additional_properties(),
-            AdditionalProperties::False
-        ));
     }
 
     #[test]

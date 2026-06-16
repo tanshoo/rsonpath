@@ -93,28 +93,15 @@ impl JsonType {
 pub struct ObjectConstraints {
     /// Maps property names to their corresponding schema nodes.
     properties: Box<[(StringPattern, SchemaNodeId)]>,
-    additional_properties: AdditionalProperties,
+    additional_properties: Option<SchemaNodeId>,
     min_properties: JsonUInt,
     max_properties: JsonUInt,
-}
-
-/// Possible values for "additionalProperties" in JSON Schema.
-#[derive(Debug, Clone, Default)]
-pub enum AdditionalProperties {
-    /// Any additional properties allowed.
-    /// Default value when "additionalProperties" is not specified.
-    #[default]
-    True,
-    /// No additional properties allowed.
-    False,
-    /// Additional properties must validate against the given schema.
-    Schema(SchemaNodeId),
 }
 
 impl ObjectConstraints {
     pub(crate) fn new(
         properties: Box<[(StringPattern, SchemaNodeId)]>,
-        additional_properties: AdditionalProperties,
+        additional_properties: Option<SchemaNodeId>,
         min_properties: Option<JsonUInt>,
         max_properties: Option<JsonUInt>,
     ) -> Self {
@@ -132,8 +119,8 @@ impl ObjectConstraints {
     }
 
     #[inline]
-    pub(crate) fn additional_properties(&self) -> &AdditionalProperties {
-        &self.additional_properties
+    pub(crate) fn additional_properties(&self) -> Option<SchemaNodeId> {
+        self.additional_properties
     }
 
     #[inline]

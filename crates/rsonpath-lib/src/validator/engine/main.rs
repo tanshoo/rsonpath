@@ -1,7 +1,7 @@
 //! Main implementation of a JSON Schema validator engine.
 use crate::classification::structural::BracketType;
 use crate::error::DepthError;
-use crate::validator::schema_automaton::{AdditionalProperties, JsonType, SchemaAutomaton, SchemaNode, SchemaNodeId};
+use crate::validator::schema_automaton::{JsonType, SchemaAutomaton, SchemaNode, SchemaNodeId};
 use crate::validator::schema_parser::{parse_schema, SchemaParseError};
 use crate::validator::well_formedness::{NoWellFormednessCheck, WellFormednessCheck};
 use crate::{
@@ -362,11 +362,8 @@ where
             }
             // Property name not found in `properties`, check `additionalProperties` policy.
             match obj.additional_properties() {
-                AdditionalProperties::False => return Err(ValidatorEngineError::DisallowedProperty(idx)),
-                AdditionalProperties::Schema(target_state) => {
-                    return Ok(*target_state);
-                }
-                AdditionalProperties::True => {}
+                None => return Err(ValidatorEngineError::DisallowedProperty(idx)),
+                Some(target_state) => return Ok(target_state),
             }
         }
 
