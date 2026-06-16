@@ -514,7 +514,7 @@ pub const fn az_tenants() -> Dataset {
 pub const fn arr_5_depth_3_props_4_len_10_10_seed_42() -> Dataset {
     Dataset {
         name: "arr_5_depth_3_props_4_len_10_10_seed_42",
-        path: dataset_path!("arr_5_depth_3_props_4_len_10_10_seed_42_instance.json"),
+        path: dataset_path!("generated/arr_5_depth_3_props_4_len_10_10_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
         checksum: hex!("bdaeecb5671734a6614f82595628f5ce6afd7bf7311a728b9fbad4a32a90a030"),
     }
@@ -523,7 +523,7 @@ pub const fn arr_5_depth_3_props_4_len_10_10_seed_42() -> Dataset {
 pub const fn arr_5_depth_3_props_6_len_8_12_seed_42() -> Dataset {
     Dataset {
         name: "arr_5_depth_3_props_6_len_8_12_seed_42",
-        path: dataset_path!("arr_5_depth_3_props_6_len_8_12_seed_42_instance.json"),
+        path: dataset_path!("generated/arr_5_depth_3_props_6_len_8_12_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
         checksum: hex!("ac1d5f2378869364aeb5cb452b2a649ba6ec7f98b8defa4fc0b1544385b1b788"),
     }
@@ -532,36 +532,45 @@ pub const fn arr_5_depth_3_props_6_len_8_12_seed_42() -> Dataset {
 pub const fn arr_5_depth_3_props_8_len_8_12_seed_42() -> Dataset {
     Dataset {
         name: "arr_5_depth_3_props_8_len_8_12_seed_42",
-        path: dataset_path!("arr_5_depth_3_props_8_len_8_12_seed_42_instance.json"),
+        path: dataset_path!("generated/arr_5_depth_3_props_8_len_8_12_seed_42_instance.json"),
         source: DatasetSource::LocalJson,
         checksum: hex!("756ac90be345c17608ec06405f44dc90c601652a5d6789b6db939532d8564082"),
     }
 }
 
-pub const fn baseline_depth_3_props_4_len_10() -> Dataset {
+pub const fn corporations_10k() -> Dataset {
     Dataset {
-        name: "baseline_depth_3_props_4_len_10",
-        path: dataset_path!("baseline_depth_3_props_4_len_10_instance.json"),
+        name: "corporations_10k",
+        path: dataset_path!("corporations/corporations_10k.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("5a0e469643abb446b741d39c946c81beec924a32171c8c8de0274785a09a156c"),
+        checksum: hex!("eecf4967d28c0814abeeebae67a40afa33600478cd39118c9f180a1815abab6f"),
     }
 }
 
-pub const fn baseline_depth_3_props_6_len_10() -> Dataset {
+pub const fn corporations_50k() -> Dataset {
     Dataset {
-        name: "baseline_depth_3_props_6_len_10",
-        path: dataset_path!("baseline_depth_3_props_6_len_10_instance.json"),
+        name: "corporations_50k",
+        path: dataset_path!("corporations/corporations_50k.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("572f30466de558fd5aa3822c6baea5d925ce4da9c5736a6581f6a6091d367037"),
+        checksum: hex!("e0773743b2e2eb019a893c74bbcf0351aaf0d5a2ae0fa902068d552985ecab17"),
     }
 }
 
-pub const fn baseline_depth_3_props_8_len_10() -> Dataset {
+pub const fn corporations_100k() -> Dataset {
     Dataset {
-        name: "baseline_depth_3_props_8_len_10",
-        path: dataset_path!("baseline_depth_3_props_8_len_10_instance.json"),
+        name: "corporations_100k",
+        path: dataset_path!("corporations/corporations_100k.json"),
         source: DatasetSource::LocalJson,
-        checksum: hex!("e3a5ca66bee493f5b43eea7fdec0ded48595c602b60780fc41d30da3c3d64a40"),
+        checksum: hex!("a15ac7fb4c3e5ea1f1a0da4d0a506fea2a5569dcae063220f75264f07822e36c"),
+    }
+}
+
+pub const fn corporations_200k() -> Dataset {
+    Dataset {
+        name: "corporations_200k",
+        path: dataset_path!("corporations/corporations_200k.json"),
+        source: DatasetSource::LocalJson,
+        checksum: hex!("de119224c1c33913ec0341bd7cfd3a6a813a272876f31660e9a44e75a6172e08"),
     }
 }
 
