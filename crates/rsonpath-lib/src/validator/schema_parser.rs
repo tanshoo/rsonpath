@@ -29,9 +29,10 @@ impl SchemaParser {
     #[inline]
     fn new() -> Self {
         let mut parser = Self {
-            nodes: Vec::new(),
+            // Dummy node, so that all used node ids are non-zero.
+            nodes: vec![SchemaNode::Null],
             defs: HashMap::new(),
-            true_schema: SchemaNodeId(0), // temporary
+            true_schema: SchemaNodeId::new(1), // temporary
         };
 
         parser.true_schema = parser.add_true_schema();
@@ -51,16 +52,16 @@ impl SchemaParser {
         for &t in &[JsonType::String, JsonType::Number, JsonType::Boolean, JsonType::Null] {
             type_constr[t as usize] = Some(atomic_true_schema);
         }
-        self.nodes[true_schema.0 as usize] = SchemaNode::Type(TypeConstraints::new(type_constr));
+        self.nodes[true_schema.as_usize()] = SchemaNode::Type(TypeConstraints::new(type_constr));
 
-        self.nodes[obj_true_schema.0 as usize] = SchemaNode::Object(ObjectConstraints::new(
+        self.nodes[obj_true_schema.as_usize()] = SchemaNode::Object(ObjectConstraints::new(
             Box::new([]),
             AdditionalProperties::Schema(true_schema),
             None,
             None,
         ));
 
-        self.nodes[arr_true_schema.0 as usize] = SchemaNode::Array(ArrayConstraints::new(true_schema, None, None));
+        self.nodes[arr_true_schema.as_usize()] = SchemaNode::Array(ArrayConstraints::new(true_schema, None, None));
 
         true_schema
     }
@@ -68,15 +69,17 @@ impl SchemaParser {
     /// Add a new schema node and return its id.
     #[inline]
     fn add_node(&mut self, node: SchemaNode) -> SchemaNodeId {
+        let id = self.nodes.len();
         self.nodes.push(node);
-        SchemaNodeId(self.nodes.len() as u32 - 1)
+        SchemaNodeId::new(id)
     }
 
     /// Insert a placeholder node and return its id.
     #[inline]
     fn reserve_node(&mut self) -> SchemaNodeId {
+        let id = self.nodes.len();
         self.nodes.push(SchemaNode::Null);
-        SchemaNodeId(self.nodes.len() as u32 - 1)
+        SchemaNodeId::new(id)
     }
 
     fn parse(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
@@ -229,7 +232,7 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
         for (def_name, def_schema) in defs_obj {
             let node_id = parser.parse(def_schema)?;
             let def_node_id = *parser.defs.get(&make_key(def_name)).expect("Definition id must exist.");
-            parser.nodes[def_node_id.0 as usize] = parser.nodes.swap_remove(node_id.0 as usize);
+            parser.nodes[def_node_id.as_usize()] = parser.nodes.swap_remove(node_id.as_usize());
         }
     }
 

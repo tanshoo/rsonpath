@@ -1,16 +1,30 @@
 //! Automaton representation of a JSON Schema.
 use crate::string_pattern::StringPattern;
 use rsonpath_syntax::num::JsonUInt;
-use std::{fmt::Display, ops::Index};
+use std::{fmt::Display, num::NonZeroU32, ops::Index};
 
 /// Identifier of a [`SchemaNode`].
+/// it is a non-zero type, so that niche optimization
+/// can be used for [`Option<SchemaNodeId>`].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct SchemaNodeId(pub(crate) u32);
+pub struct SchemaNodeId(pub(crate) NonZeroU32);
+
+impl SchemaNodeId {
+    #[inline(always)]
+    pub(crate) fn new(id: usize) -> Self {
+        Self(NonZeroU32::new(id as u32).expect("SchemaNodeId cannot be 0"))
+    }
+
+    #[inline(always)]
+    pub(crate) fn as_usize(self) -> usize {
+        self.0.get() as usize
+    }
+}
 
 impl Display for SchemaNodeId {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SchemaNodeId({})", self.0)
+        write!(f, "SchemaNodeId({})", self.as_usize())
     }
 }
 
@@ -220,6 +234,6 @@ impl Index<SchemaNodeId> for SchemaAutomaton {
 
     #[inline(always)]
     fn index(&self, index: SchemaNodeId) -> &Self::Output {
-        &self.nodes[index.0 as usize]
+        &self.nodes[index.as_usize()]
     }
 }
