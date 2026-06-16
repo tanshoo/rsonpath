@@ -208,13 +208,6 @@ impl SchemaAutomaton {
         Self { nodes, root }
     }
 
-    /// Get all nodes in the schema graph.
-    #[cfg(test)]
-    #[inline]
-    pub(crate) fn nodes(&self) -> &[SchemaNode] {
-        &self.nodes
-    }
-
     /// Get root node index.
     #[inline]
     pub(crate) fn root(&self) -> SchemaNodeId {

@@ -284,22 +284,46 @@ mod tests {
         parse_schema(schema).expect("expected schema to parse")
     }
 
+    fn get_property<'a>(properties: &'a [(StringPattern, SchemaNodeId)], name: &str) -> Option<&'a SchemaNodeId> {
+        properties.iter().find(|(k, _)| k == &make_key(name)).map(|(_, v)| v)
+    }
+
+    fn get_type_node<'a>(definition: &'a SchemaAutomaton, id: SchemaNodeId, json_type: JsonType) -> SchemaNodeId {
+        let SchemaNode::Type(type_constraints) = &definition[id] else {
+            panic!("expected Type node, found {:?}", &definition[id]);
+        };
+        type_constraints[json_type].expect("expected type constraint")
+    }
+
+    fn get_object_node<'a>(definition: &'a SchemaAutomaton, id: SchemaNodeId) -> &'a ObjectConstraints {
+        let SchemaNode::Object(object) = &definition[id] else {
+            panic!("expected Object node, found {:?}", &definition[id]);
+        };
+        object
+    }
+
+    fn get_array_node<'a>(definition: &'a SchemaAutomaton, id: SchemaNodeId) -> &'a ArrayConstraints {
+        let SchemaNode::Array(array) = &definition[id] else {
+            panic!("expected Array node, found {:?}", &definition[id]);
+        };
+        array
+    }
+
     #[test]
     fn parse_string_schema() {
         let definition = parse_schema_ok(r#"{"type":"string"}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
+        let root_id = definition.root();
+        let str_id = get_type_node(&definition, root_id, JsonType::String);
+        assert!(matches!(definition[str_id], SchemaNode::Str));
     }
 
     #[test]
     fn parse_true_schema() {
         let definition = parse_schema_ok("true");
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Any));
+        let root_id = definition.root();
+        assert!(matches!(definition[root_id], SchemaNode::Type(_)));
     }
 
     #[test]
@@ -315,17 +339,18 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root(), SchemaNodeId(2));
-        assert_eq!(definition.nodes().len(), 3);
+        let root_id = definition.root();
+        let obj_id = get_type_node(&definition, root_id, JsonType::Object);
+        let object = get_object_node(&definition, obj_id);
 
-        assert!(matches!(definition.nodes()[0], SchemaNode::Number));
-        assert!(matches!(definition.nodes()[1], SchemaNode::Str));
+        let name_prop_id = *get_property(object.properties(), "name").unwrap();
+        let name_str_id = get_type_node(&definition, name_prop_id, JsonType::String);
+        assert!(matches!(definition[name_str_id], SchemaNode::Str));
 
-        let SchemaNode::Object(object) = &definition.nodes()[2] else {
-            panic!("expected object node");
-        };
-        assert_eq!(object.properties().get(&make_key("name")), Some(&SchemaNodeId(1)));
-        assert_eq!(object.properties().get(&make_key("age")), Some(&SchemaNodeId(0)));
+        let age_prop_id = *get_property(object.properties(), "age").unwrap();
+        let age_num_id = get_type_node(&definition, age_prop_id, JsonType::Number);
+        assert!(matches!(definition[age_num_id], SchemaNode::Number));
+
         assert!(matches!(object.additional_properties(), AdditionalProperties::False));
     }
 
@@ -341,21 +366,21 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root(), SchemaNodeId(2));
-        assert_eq!(definition.nodes().len(), 3);
+        let root_id = definition.root();
+        let obj_id = get_type_node(&definition, root_id, JsonType::Object);
+        let object = get_object_node(&definition, obj_id);
 
-        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
-        assert!(matches!(definition.nodes()[1], SchemaNode::Object(_)));
+        let name_prop_id = *get_property(object.properties(), "name").unwrap();
+        let name_str_id = get_type_node(&definition, name_prop_id, JsonType::String);
+        assert!(matches!(definition[name_str_id], SchemaNode::Str));
 
-        let SchemaNode::Object(object) = &definition.nodes()[2] else {
-            panic!("expected object node");
-        };
-
-        assert_eq!(object.properties().get(&make_key("name")), Some(&SchemaNodeId(0)));
-        assert!(matches!(
-            object.additional_properties(),
-            AdditionalProperties::Schema(SchemaNodeId(1))
-        ));
+        match object.additional_properties() {
+            AdditionalProperties::Schema(id) => {
+                let add_obj_id = get_type_node(&definition, *id, JsonType::Object);
+                get_object_node(&definition, add_obj_id);
+            }
+            _ => panic!("expected Schema"),
+        }
     }
 
     #[test]
@@ -375,13 +400,13 @@ mod tests {
             }"##,
         );
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
+        let root_id = definition.root();
+        let obj_id = get_type_node(&definition, root_id, JsonType::Object);
+        let object = get_object_node(&definition, obj_id);
 
-        let SchemaNode::Object(object) = &definition.nodes()[0] else {
-            panic!("expected object node");
-        };
-        assert_eq!(object.properties().get(&make_key("next")), Some(&SchemaNodeId(0)));
+        let next_prop_id = *get_property(object.properties(), "next").unwrap();
+        assert_eq!(next_prop_id, root_id);
+
         assert!(matches!(object.additional_properties(), AdditionalProperties::False));
     }
 
@@ -403,22 +428,22 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(definition.root(), SchemaNodeId(2));
-        assert_eq!(definition.nodes().len(), 3);
+        let root_id = definition.root();
+        let root_obj_id = get_type_node(&definition, root_id, JsonType::Object);
+        let root_object = get_object_node(&definition, root_obj_id);
 
-        let SchemaNode::Object(root_object) = &definition.nodes()[2] else {
-            panic!("expected root to be an object node");
-        };
-        assert_eq!(root_object.properties().get(&make_key("child")), Some(&SchemaNodeId(1)));
+        let child_prop_id = *get_property(root_object.properties(), "child").unwrap();
+        let child_obj_id = get_type_node(&definition, child_prop_id, JsonType::Object);
+        let child_object = get_object_node(&definition, child_obj_id);
+
+        let name_prop_id = *get_property(child_object.properties(), "name").unwrap();
+        let name_str_id = get_type_node(&definition, name_prop_id, JsonType::String);
+        assert!(matches!(definition[name_str_id], SchemaNode::Str));
+
         assert!(matches!(
             root_object.additional_properties(),
             AdditionalProperties::False
         ));
-
-        let SchemaNode::Object(child_object) = &definition.nodes()[1] else {
-            panic!("expected child to be an object node");
-        };
-        assert_eq!(child_object.properties().get(&make_key("name")), Some(&SchemaNodeId(0)));
         assert!(matches!(
             child_object.additional_properties(),
             AdditionalProperties::False
@@ -429,27 +454,24 @@ mod tests {
     fn parse_array_schema() {
         let definition = parse_schema_ok(r#"{"type":"array"}"#);
 
-        // `items` is absent so any value is accepted for elements.
-        assert_eq!(definition.root(), SchemaNodeId(1));
-        assert_eq!(definition.nodes().len(), 2);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Any));
-        let SchemaNode::Array(array) = &definition.nodes()[1] else {
-            panic!("expected array node");
-        };
-        assert_eq!(array.items(), SchemaNodeId(0));
+        let root_id = definition.root();
+        let arr_id = get_type_node(&definition, root_id, JsonType::Array);
+        let array = get_array_node(&definition, arr_id);
+
+        assert!(matches!(definition[array.items()], SchemaNode::Type(_)));
     }
 
     #[test]
     fn parse_array_items_schema() {
         let definition = parse_schema_ok(r#"{"type":"array","items":{"type":"string"}}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(1));
-        assert_eq!(definition.nodes().len(), 2);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
-        let SchemaNode::Array(array) = &definition.nodes()[1] else {
-            panic!("expected array node");
-        };
-        assert_eq!(array.items(), SchemaNodeId(0));
+        let root_id = definition.root();
+        let arr_id = get_type_node(&definition, root_id, JsonType::Array);
+        let array = get_array_node(&definition, arr_id);
+
+        let items_id = array.items();
+        let str_id = get_type_node(&definition, items_id, JsonType::String);
+        assert!(matches!(definition[str_id], SchemaNode::Str));
     }
 
     #[test]
@@ -463,53 +485,54 @@ mod tests {
     fn parse_str_schema() {
         let definition = parse_schema_ok(r#"{"type":"string"}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
+        let root_id = definition.root();
+        let str_id = get_type_node(&definition, root_id, JsonType::String);
+        assert!(matches!(definition[str_id], SchemaNode::Str));
     }
 
     #[test]
     fn parse_number_schema() {
         let definition = parse_schema_ok(r#"{"type":"number"}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Number));
+        let root_id = definition.root();
+        let num_id = get_type_node(&definition, root_id, JsonType::Number);
+        assert!(matches!(definition[num_id], SchemaNode::Number));
     }
 
     #[test]
     fn parse_boolean_schema() {
         let definition = parse_schema_ok(r#"{"type":"boolean"}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Boolean));
+        let root_id = definition.root();
+        let bool_id = get_type_node(&definition, root_id, JsonType::Boolean);
+        assert!(matches!(definition[bool_id], SchemaNode::Boolean));
     }
 
     #[test]
     fn parse_null_schema() {
         let definition = parse_schema_ok(r#"{"type":"null"}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(0));
-        assert_eq!(definition.nodes().len(), 1);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Null));
+        let root_id = definition.root();
+        let null_id = get_type_node(&definition, root_id, JsonType::Null);
+        assert!(matches!(definition[null_id], SchemaNode::Null));
     }
 
     #[test]
     fn parse_multiple_types() {
         let definition = parse_schema_ok(r#"{"type": ["string", "number", "object"]}"#);
 
-        assert_eq!(definition.root(), SchemaNodeId(3));
-        assert_eq!(definition.nodes().len(), 4);
-        assert!(matches!(definition.nodes()[0], SchemaNode::Str));
-        assert!(matches!(definition.nodes()[1], SchemaNode::Number));
-        assert!(matches!(definition.nodes()[2], SchemaNode::Object(_)));
-        let SchemaNode::Type(type_constraints) = &definition.nodes()[3] else {
+        let root_id = definition.root();
+        let SchemaNode::Type(type_constraints) = &definition[root_id] else {
             panic!("expected type node");
         };
-        assert_eq!(
-            type_constraints.types(),
-            &[SchemaNodeId(0), SchemaNodeId(1), SchemaNodeId(2)]
-        );
+
+        let str_id = type_constraints[JsonType::String].unwrap();
+        assert!(matches!(definition[str_id], SchemaNode::Str));
+
+        let num_id = type_constraints[JsonType::Number].unwrap();
+        assert!(matches!(definition[num_id], SchemaNode::Number));
+
+        let obj_id = type_constraints[JsonType::Object].unwrap();
+        assert!(matches!(definition[obj_id], SchemaNode::Object(_)));
     }
 }
