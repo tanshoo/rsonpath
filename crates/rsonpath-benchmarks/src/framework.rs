@@ -201,7 +201,7 @@ impl Benchset {
         Ok(this)
     }
 
-    pub fn add_all_validator_targets_not_using_serde(self, schema: &str) -> Result<Self, BenchmarkError> {
+    pub fn add_all_streamed_validator_targets(self, schema: &str) -> Result<Self, BenchmarkError> {
         let this = self
             .add_target(BenchTarget::Rsonschema(schema))?
             .add_target(BenchTarget::RsonschemaMmap(schema))?
