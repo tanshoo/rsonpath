@@ -77,16 +77,27 @@ impl SchemaParser {
         SchemaNodeId::new(id)
     }
 
-    fn parse(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
+    #[inline]
+    fn copy_node(&mut self, dest: Option<SchemaNodeId>, source: SchemaNodeId) -> SchemaNodeId {
+        if let Some(dest_id) = dest {
+            self.nodes[dest_id.as_usize()] = self.nodes[source.as_usize()].clone();
+            dest_id
+        } else {
+            source
+        }
+    }
+
+    fn parse(&mut self, value: &Value, dest: Option<SchemaNodeId>) -> Result<SchemaNodeId, SchemaParseError> {
         if let Value::Bool(true) = value {
-            return Ok(self.true_schema);
+            return Ok(self.copy_node(dest, self.true_schema));
         } else if let Value::Bool(false) = value {
             return Err(SchemaParseError::UnsupportedKeyword("false"));
         }
 
         // Check for $ref.
         if let Some(ref_str) = value.get("$ref").and_then(|v| v.as_str()) {
-            return self.resolve_ref(ref_str);
+            let ref_id = self.resolve_ref(ref_str)?;
+            return Ok(self.copy_node(dest, ref_id));
         }
 
         let types: SmallVec<[&str; 7]> = match value.get("type") {
@@ -108,7 +119,13 @@ impl SchemaParser {
             }
         }
 
-        Ok(self.add_node(SchemaNode::Type(TypeConstraints::new(constraints))))
+        let node = SchemaNode::Type(TypeConstraints::new(constraints));
+        Ok(if let Some(dest_id) = dest {
+            self.nodes[dest_id.as_usize()] = node;
+            dest_id
+        } else {
+            self.add_node(node)
+        })
     }
 
     fn parse_object(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
@@ -118,21 +135,16 @@ impl SchemaParser {
         if let Some(props_map) = value.get("properties").and_then(|p| p.as_object()) {
             properties.reserve(props_map.len());
             for (key, val) in props_map {
-                let node_id = self.parse(val)?;
+                let node_id = self.parse(val, None)?;
                 properties.push((make_key(key), node_id));
             }
         }
 
-        let mut additional_properties = Some(self.true_schema);
-
-        // additionalProperties
-        if let Some(additional) = value.get("additionalProperties") {
-            additional_properties = match additional {
-                Value::Bool(true) => Some(self.true_schema),
-                Value::Bool(false) => None,
-                _ => Some(self.parse(additional)?),
-            };
-        }
+        let additional_properties = match value.get("additionalProperties") {
+            Some(Value::Bool(true)) | None => Some(self.true_schema),
+            Some(Value::Bool(false)) => None,
+            Some(other) => Some(self.parse(other, None)?),
+        };
 
         let min_properties = self.parse_uint_field(value, "minProperties");
         let max_properties = self.parse_uint_field(value, "maxProperties");
@@ -148,11 +160,9 @@ impl SchemaParser {
 
     fn parse_array(&mut self, value: &Value) -> Result<SchemaNodeId, SchemaParseError> {
         // Parse `items` if present, otherwise anything is accepted.
-        let items = if let Some(items_schema) = value.get("items") {
-            self.parse(items_schema)?
-        } else {
-            self.true_schema
-        };
+        let items = value
+            .get("items")
+            .map_or(Ok(self.true_schema), |i| self.parse(i, None))?;
         let min_items = self.parse_uint_field(value, "minItems");
         let max_items = self.parse_uint_field(value, "maxItems");
 
@@ -213,27 +223,26 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
     // First, parse all type definitions in $defs.
     if let Some(defs_obj) = schema.get("$defs").and_then(|d| d.as_object()) {
         // In the first pass, reserve ids for all $defs types to allow for references.
+        let mut def_schemas_to_parse = Vec::with_capacity(defs_obj.len());
         parser.defs.reserve(defs_obj.len());
-        for type_name in defs_obj.keys() {
-            let key = make_key(type_name);
-            if parser.defs.contains_key(&key) {
-                Err(SchemaParseError::DuplicateTypeDef(type_name.clone()))?
-            }
+
+        for (type_name, def_schema) in defs_obj {
             // Insert a placeholder, will be replaced with actual node after parsing.
             let def_id = parser.reserve_node();
-            parser.defs.insert(key, def_id);
+            if parser.defs.insert(make_key(type_name), def_id).is_some() {
+                return Err(SchemaParseError::DuplicateTypeDef(type_name.clone()));
+            }
+            def_schemas_to_parse.push((def_schema, def_id));
         }
 
         // In the second pass, parse all types in $defs and update their nodes.
-        for (def_name, def_schema) in defs_obj {
-            let node_id = parser.parse(def_schema)?;
-            let def_node_id = *parser.defs.get(&make_key(def_name)).expect("Definition id must exist.");
-            parser.nodes[def_node_id.as_usize()] = parser.nodes.swap_remove(node_id.as_usize());
+        for (def_schema, def_node_id) in def_schemas_to_parse {
+            parser.parse(def_schema, Some(def_node_id))?;
         }
     }
 
     // Parse the root schema
-    let root = parser.parse(&schema)?;
+    let root = parser.parse(&schema, None)?;
 
     Ok(SchemaAutomaton::new(parser.nodes, root))
 }
@@ -241,13 +250,11 @@ pub fn parse_schema(schema_str: &str) -> Result<SchemaAutomaton, SchemaParseErro
 /// Extract schema name from a reference string in $ref.
 /// Works only for local references in format "#/$defs/TypeName".
 fn get_schema_name_from_ref(ref_str: &str) -> Result<&str, SchemaParseError> {
-    if ref_str.starts_with("#/$defs/") {
-        Ok(&ref_str["#/$defs/".len()..])
-    } else {
-        Err(SchemaParseError::UnsupportedKeyword(
+    ref_str
+        .strip_prefix("#/$defs/")
+        .ok_or(SchemaParseError::UnsupportedKeyword(
             "Only local references in format '#/$defs/TypeName' are supported",
         ))
-    }
 }
 
 /// Create a StringPattern from a string literal.
