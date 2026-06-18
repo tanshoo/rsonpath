@@ -208,9 +208,6 @@ impl Benchset {
             .add_target(BenchTarget::Dja(schema))?
             .add_target(BenchTarget::SpawnBaseline(schema))?;
 
-        #[cfg(feature = "blaze")]
-        let this = this.add_target(BenchTarget::Blaze(schema))?;
-
         Ok(this)
     }
 

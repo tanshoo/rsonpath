@@ -97,7 +97,7 @@ pub fn clang_10(c: &mut Criterion) -> Result<(), BenchmarkError> {
     let schema = "./data/schemas/clang_schema.json";
 
     let benchset = Benchset::new("validator::clang_10", dataset::clang_10())?
-        .add_all_validator_targets_not_using_serde(schema)?
+        .add_all_streamed_validator_targets(schema)?
         .finish();
 
     benchset.run(c);
@@ -109,7 +109,7 @@ pub fn clang_50(c: &mut Criterion) -> Result<(), BenchmarkError> {
     let schema = "./data/schemas/clang_schema.json";
 
     let benchset = Benchset::new("validator::clang_50", dataset::clang_50())?
-        .add_all_validator_targets_not_using_serde(schema)?
+        .add_all_streamed_validator_targets(schema)?
         .finish();
 
     benchset.run(c);
@@ -121,7 +121,7 @@ pub fn clang_100(c: &mut Criterion) -> Result<(), BenchmarkError> {
     let schema = "./data/schemas/clang_schema.json";
 
     let benchset = Benchset::new("validator::clang_100", dataset::clang_100())?
-        .add_all_validator_targets_not_using_serde(schema)?
+        .add_all_streamed_validator_targets(schema)?
         .finish();
 
     benchset.run(c);
