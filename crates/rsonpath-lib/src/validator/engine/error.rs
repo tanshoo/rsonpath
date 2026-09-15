@@ -18,4 +18,31 @@ pub enum ValidatorEngineError {
     /// of the disallowed property name.
     #[error("Disallowed property at position {0}")]
     DisallowedProperty(usize),
+    /// Type mismatch between the schema and the document.
+    /// The inner [`usize`] value indicates the position of the value that caused the mismatch.
+    #[error("Type mismatch at position {0}")]
+    TypeMismatch(usize),
+    /// `minItems` validation failed for an array instance.
+    /// The inner [`usize`] value indicates the position of the closing bracket of the array.
+    #[error("Array instance at {0} has size less than `minItems`.")]
+    MinItemsInvalid(usize),
+    /// `maxItems` validation failed for an array instance.
+    /// The inner [`usize`] value indicates the position of the closing bracket of the array.
+    #[error("Array instance at {0} has size greater than `maxItems`.")]
+    MaxItemsInvalid(usize),
+    /// `minProperties` validation failed for an object instance.
+    /// The inner [`usize`] value indicates the position of the closing brace of the object.
+    #[error("Object instance at {0} has fewer properties than `minProperties`.")]
+    MinPropertiesInvalid(usize),
+    /// `maxProperties` validation failed for an object instance.
+    /// The inner [`usize`] value indicates the position of the closing brace of the object.
+    #[error("Object instance at {0} has more properties than `maxProperties`.")]
+    MaxPropertiesInvalid(usize),
+    /// Unexpected structural character in the document.
+    /// The inner [`usize`] value indicates the position of the character.
+    #[error("Unexpected structural character at position {0}")]
+    UnexpectedStructural(usize),
+    /// Unsupported JSON Schema feature.
+    #[error("Unsupported JSON Schema feature: {0}")]
+    UnsupportedFeature(&'static str),
 }

@@ -10,7 +10,10 @@ use crate::{
         jsonpath_rust::{JsonpathRust, JsonpathRustError},
         jsonschema::{JsonSchema, JsonSchemaError},
         rsonpath::{Rsonpath, RsonpathCount, RsonpathError, RsonpathMmap, RsonpathMmapCount},
-        rsonschema::{Rsonschema, RsonschemaError},
+        rsonschema::{
+            Rsonschema, RsonschemaError, RsonschemaMmap, RsonschemaMmapWellFormednessOnly,
+            RsonschemaMmapWithWellFormedness, RsonschemaWellFormednessOnly, RsonschemaWithWellFormedness,
+        },
         rust_jsurfer::{JSurfer, JSurferError},
         serde_json_path::{SerdeJsonPath, SerdeJsonPathError},
         spawn_baseline::{SpawnBaseline, SpawnBaselineError},
@@ -33,6 +36,11 @@ pub enum BenchTarget<'q> {
     SerdeJsonPath(&'q str),
 
     Rsonschema(&'q str),
+    RsonschemaWithWellFormedness(&'q str),
+    RsonschemaWellFormednessOnly(&'q str),
+    RsonschemaMmap(&'q str),
+    RsonschemaMmapWithWellFormedness(&'q str),
+    RsonschemaMmapWellFormednessOnly(&'q str),
     Boon(&'q str),
     JsonSchema(&'q str),
     Dja(&'q str),
@@ -178,6 +186,37 @@ impl Benchset {
             .add_target(BenchTarget::SerdeJsonPath(query))
     }
 
+    pub fn add_all_validator_targets(self, schema: &str) -> Result<Self, BenchmarkError> {
+        let this = self
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaMmap(schema))?
+            .add_target(BenchTarget::Boon(schema))?
+            .add_target(BenchTarget::JsonSchema(schema))?
+            .add_target(BenchTarget::Dja(schema))?
+            .add_target(BenchTarget::SpawnBaseline(schema))?;
+
+        #[cfg(feature = "blaze")]
+        let this = this.add_target(BenchTarget::Blaze(schema))?;
+
+        Ok(this)
+    }
+
+    pub fn add_all_streamed_validator_targets(self, schema: &str) -> Result<Self, BenchmarkError> {
+        let this = self
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaMmap(schema))?
+            .add_target(BenchTarget::Dja(schema))?
+            .add_target(BenchTarget::SpawnBaseline(schema))?;
+
+        Ok(this)
+    }
+
+    pub fn add_rsonschema_with_all_modes(self, schema: &str) -> Result<Self, BenchmarkError> {
+        self.add_target(BenchTarget::RsonschemaWellFormednessOnly(schema))?
+            .add_target(BenchTarget::Rsonschema(schema))?
+            .add_target(BenchTarget::RsonschemaWithWellFormedness(schema))
+    }
+
     pub fn add_rust_native_targets(self, query: &str) -> Result<Self, BenchmarkError> {
         self.add_target(BenchTarget::RsonpathMmap(query, ResultType::Full))?
             .add_target(BenchTarget::JsonpathRust(query))?
@@ -252,6 +291,31 @@ impl Target for BenchTarget<'_> {
 
             BenchTarget::Rsonschema(q) => {
                 let rsonschema = Rsonschema::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaWithWellFormedness(q) => {
+                let rsonschema = RsonschemaWithWellFormedness::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaWellFormednessOnly(q) => {
+                let rsonschema = RsonschemaWellFormednessOnly::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmap(q) => {
+                let rsonschema = RsonschemaMmap::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmapWithWellFormedness(q) => {
+                let rsonschema = RsonschemaMmapWithWellFormedness::new()?;
+                let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmapWellFormednessOnly(q) => {
+                let rsonschema = RsonschemaMmapWellFormednessOnly::new()?;
                 let prepared = prepare(rsonschema, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))
             }
@@ -344,6 +408,36 @@ impl Target for BenchTarget<'_> {
 
             BenchTarget::Rsonschema(q) => {
                 let rsonschema = Rsonschema::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaWithWellFormedness(q) => {
+                let rsonschema = RsonschemaWithWellFormedness::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaWellFormednessOnly(q) => {
+                let rsonschema = RsonschemaWellFormednessOnly::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmap(q) => {
+                let rsonschema = RsonschemaMmap::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmapWithWellFormedness(q) => {
+                let rsonschema = RsonschemaMmapWithWellFormedness::new()?;
+                let prepared =
+                    prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
+                Ok(Box::new(prepared))
+            }
+            BenchTarget::RsonschemaMmapWellFormednessOnly(q) => {
+                let rsonschema = RsonschemaMmapWellFormednessOnly::new()?;
                 let prepared =
                     prepare_with_id(rsonschema, id, file_path, q, load_ahead_of_time, compile_ahead_of_time)?;
                 Ok(Box::new(prepared))

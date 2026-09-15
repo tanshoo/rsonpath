@@ -138,7 +138,7 @@ where
     /// Turn classification of [`Structural::Colon`] characters on.
     ///
     /// The `idx` passed should be the index of the byte in the input
-    /// from which commas are to be classified. Passing an `idx` that
+    /// from which colons are to be classified. Passing an `idx` that
     /// does not match the index which the internal [`QuoteClassifiedIterator`]
     /// reached may result in incorrect results.
     fn turn_colons_on(&mut self, idx: usize);
